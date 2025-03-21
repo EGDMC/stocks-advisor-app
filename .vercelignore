@@ -1,0 +1,21 @@
+# Ignore model files
+models/
+data/
+sample_data/
+
+# Ignore development files
+__pycache__/
+*.pyc
+.env
+.env.example
+.git/
+.gitignore
+.venv/
+test_setup.py
+how_to_deploy.md
+vercel_troubleshooting.md
+setup_vercel_account.py
+setup_vercel_env.py
+manual_vercel_setup.md
+deploy.py
+login_vercel.py
