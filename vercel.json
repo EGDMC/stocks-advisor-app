@@ -2,19 +2,19 @@
   "version": 2,
   "builds": [
     {
-      "src": "src/app.py",
+      "src": "src/app_minimal.py",
       "use": "@vercel/python",
       "config": {
         "maxLambdaSize": "15mb",
         "runtime": "python3.9",
-        "installCommand": "pip install -r requirements_prod.txt"
+        "installCommand": "pip install dash==2.14.2 dash-bootstrap-components==1.5.0 gunicorn==21.2.0"
       }
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "src/app.py"
+      "dest": "src/app_minimal.py"
     }
   ],
   "env": {
