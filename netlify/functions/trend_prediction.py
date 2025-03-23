@@ -1,155 +1,225 @@
-import math
-from statistics import mean, stdev
+import json
+import os
+import numpy as np
+import pandas as pd
+from datetime import datetime, timedelta
 
-def calculate_trend_strength(prices, window=20):
-    """Calculate trend strength using price momentum and volatility"""
-    if len(prices) < window:
-        return {'strength': 0, 'direction': 'neutral'}
+def predict_trend(data):
+    """Predict market trend using multiple indicators"""
+    try:
+        # Convert data to DataFrame
+        df = pd.DataFrame({
+            'Date': pd.to_datetime(data['dates']),
+            'Open': data['open'],
+            'High': data['high'],
+            'Low': data['low'],
+            'Close': data['close'],
+            'Volume': data['volume']
+        })
+
+        # Calculate technical indicators
+        df = calculate_indicators(df)
+        
+        # Generate prediction
+        prediction = generate_prediction(df)
+        
+        # Calculate support/resistance levels
+        levels = calculate_key_levels(df)
+        
+        # Generate future dates for projection
+        future_dates = [df['Date'].iloc[-1] + timedelta(days=x) for x in range(1, 6)]
+        
+        return {
+            'status': 'success',
+            'current_trend': prediction['trend'],
+            'future_trend': prediction['future_trend'],
+            'confidence': prediction['confidence'],
+            'next_target': prediction['target'],
+            'key_levels': levels,
+            'projection': {
+                'dates': [d.strftime('%Y-%m-%d') for d in future_dates],
+                'values': calculate_projection(df, prediction['trend'], len(future_dates))
+            }
+        }
+
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
+
+def calculate_indicators(df):
+    """Calculate technical indicators for trend analysis"""
+    # Moving averages
+    df['SMA_20'] = df['Close'].rolling(window=20).mean()
+    df['SMA_50'] = df['Close'].rolling(window=50).mean()
+    df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
     
-    # Calculate price changes
-    changes = [prices[i] - prices[i-1] for i in range(1, len(prices))]
-    recent_changes = changes[:window]
+    # Momentum indicators
+    df['RSI'] = calculate_rsi(df['Close'])
+    df['MACD'], df['Signal'] = calculate_macd(df['Close'])
     
-    # Calculate momentum
-    momentum = sum(recent_changes)
-    avg_momentum = momentum / window
+    # Volatility
+    df['ATR'] = calculate_atr(df)
+    df['BB_Upper'], df['BB_Middle'], df['BB_Lower'] = calculate_bollinger_bands(df['Close'])
     
-    # Calculate volatility
-    volatility = stdev(recent_changes) if len(recent_changes) > 1 else 0
+    # Volume analysis
+    df['OBV'] = calculate_obv(df)
     
-    # Calculate trend strength (-1 to 1)
-    strength = 0
-    if volatility > 0:
-        strength = avg_momentum / volatility
-        strength = max(min(strength, 1), -1)  # Clamp between -1 and 1
+    return df
+
+def calculate_rsi(prices, period=14):
+    """Calculate Relative Strength Index"""
+    delta = prices.diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
     
-    # Determine direction
-    direction = 'bullish' if strength > 0.2 else 'bearish' if strength < -0.2 else 'neutral'
+    rs = gain / loss
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
+
+def calculate_macd(prices, fast=12, slow=26, signal=9):
+    """Calculate MACD and Signal line"""
+    exp1 = prices.ewm(span=fast, adjust=False).mean()
+    exp2 = prices.ewm(span=slow, adjust=False).mean()
+    macd = exp1 - exp2
+    signal_line = macd.ewm(span=signal, adjust=False).mean()
+    return macd, signal_line
+
+def calculate_atr(df, period=14):
+    """Calculate Average True Range"""
+    tr1 = df['High'] - df['Low']
+    tr2 = abs(df['High'] - df['Close'].shift(1))
+    tr3 = abs(df['Low'] - df['Close'].shift(1))
+    tr = pd.DataFrame([tr1, tr2, tr3]).max()
+    return tr.rolling(window=period).mean()
+
+def calculate_bollinger_bands(prices, period=20, std=2):
+    """Calculate Bollinger Bands"""
+    middle = prices.rolling(window=period).mean()
+    std_dev = prices.rolling(window=period).std()
+    upper = middle + (std_dev * std)
+    lower = middle - (std_dev * std)
+    return upper, middle, lower
+
+def calculate_obv(df):
+    """Calculate On Balance Volume"""
+    obv = (df['Volume'] * (~df['Close'].diff().le(0) * 2 - 1)).cumsum()
+    return obv
+
+def calculate_key_levels(df):
+    """Calculate key support and resistance levels"""
+    # Recent price action
+    recent = df.tail(20)
+    
+    # Find potential support levels
+    support = recent['Low'].min()
+    strong_support = recent['Low'].nsmallest(3).mean()
+    
+    # Find potential resistance levels
+    resistance = recent['High'].max()
+    strong_resistance = recent['High'].nlargest(3).mean()
     
     return {
-        'strength': abs(strength),
-        'direction': direction
+        'support': float(support),
+        'strong_support': float(strong_support),
+        'resistance': float(resistance),
+        'strong_resistance': float(strong_resistance)
     }
 
-def predict_breakout(prices, levels, volume, window=20):
-    """Predict potential breakout levels"""
-    breakouts = []
+def generate_prediction(df):
+    """Generate trend prediction based on technical analysis"""
+    # Get latest values
+    latest = df.iloc[-1]
+    prev = df.iloc[-2]
     
-    if len(prices) < window:
-        return breakouts
+    # Price momentum
+    price_trend = 'up' if latest['Close'] > latest['SMA_20'] > latest['SMA_50'] else \
+                 'down' if latest['Close'] < latest['SMA_20'] < latest['SMA_50'] else \
+                 'neutral'
     
-    recent_prices = prices[:window]
-    recent_volume = volume[:window]
-    avg_volume = mean(recent_volume)
-    price_volatility = stdev(recent_prices)
+    # MACD analysis
+    macd_trend = 'up' if latest['MACD'] > latest['Signal'] else 'down'
     
-    for level in levels:
-        level_price = level['price']
-        distance = abs(prices[0] - level_price)
-        
-        # Check if price is near the level
-        if distance <= price_volatility:
-            # Check for volume increase
-            volume_increase = volume[0] > avg_volume * 1.2
-            
-            # Determine breakout probability
-            prob_factors = []
-            
-            # Volume factor
-            prob_factors.append(0.7 if volume_increase else 0.3)
-            
-            # Price momentum factor
-            recent_momentum = (prices[0] - prices[window-1]) / prices[window-1]
-            momentum_factor = 0.6 if abs(recent_momentum) > price_volatility / prices[0] else 0.4
-            prob_factors.append(momentum_factor)
-            
-            # Distance factor (closer = higher probability)
-            distance_factor = 1 - (distance / price_volatility)
-            prob_factors.append(distance_factor)
-            
-            # Calculate overall probability
-            probability = sum(prob_factors) / len(prob_factors)
-            
-            # Determine direction based on current price position
-            direction = 'up' if prices[0] < level_price else 'down'
-            
-            breakouts.append({
-                'level': level_price,
-                'type': level['type'],
-                'direction': direction,
-                'probability': round(probability, 2),
-                'volume_confirmed': volume_increase
-            })
+    # RSI analysis
+    rsi_trend = 'up' if latest['RSI'] > 50 and latest['RSI'] < 70 else \
+                'down' if latest['RSI'] < 50 and latest['RSI'] > 30 else \
+                'neutral'
     
-    return breakouts
-
-def project_price_targets(prices, patterns, trend):
-    """Project price targets based on patterns and trend"""
-    targets = []
-    current_price = prices[0]
+    # Volume confirmation
+    volume_trend = 'up' if latest['OBV'] > prev['OBV'] else 'down'
     
-    # Get volatility-based targets
-    volatility = stdev(prices) if len(prices) > 1 else 0
+    # Combine signals
+    signals = [price_trend, macd_trend, rsi_trend, volume_trend]
+    up_signals = signals.count('up')
+    down_signals = signals.count('down')
     
-    # Short-term targets based on volatility
-    targets.append({
-        'timeframe': 'short',
-        'target': round(current_price * (1 + volatility / current_price), 2) if trend['direction'] == 'bullish'
-                 else round(current_price * (1 - volatility / current_price), 2),
-        'confidence': 0.7,
-        'method': 'volatility'
-    })
+    # Calculate overall trend and confidence
+    if up_signals > down_signals:
+        trend = 'Bullish'
+        confidence = (up_signals / len(signals)) * 100
+    elif down_signals > up_signals:
+        trend = 'Bearish'
+        confidence = (down_signals / len(signals)) * 100
+    else:
+        trend = 'Neutral'
+        confidence = 50
     
-    # Add pattern-based targets
-    for pattern in patterns:
-        if 'target' in pattern:
-            target_distance = abs(pattern['target'] - current_price)
-            # Calculate confidence based on pattern reliability and target distance
-            confidence = pattern['reliability'] * (1 - min(target_distance / (current_price * 2), 0.9))
-            
-            targets.append({
-                'timeframe': 'pattern',
-                'target': round(pattern['target'], 2),
-                'confidence': round(confidence, 2),
-                'method': pattern['type']
-            })
+    # Project future trend
+    future_trend = trend if confidence > 60 else 'Neutral'
     
-    # Project trend-based targets
-    if trend['strength'] > 0.3:
-        trend_target = current_price * (1 + trend['strength']) if trend['direction'] == 'bullish' else current_price * (1 - trend['strength'])
-        targets.append({
-            'timeframe': 'trend',
-            'target': round(trend_target, 2),
-            'confidence': round(trend['strength'], 2),
-            'method': f"{trend['direction']} trend"
-        })
-    
-    return targets
-
-def analyze_trend(prices, volumes, patterns, support_resistance_levels):
-    """Perform complete trend analysis"""
-    # Calculate basic trend metrics
-    trend = calculate_trend_strength(prices)
-    
-    # Predict potential breakouts
-    breakouts = predict_breakout(prices, support_resistance_levels, volumes)
-    
-    # Project price targets
-    targets = project_price_targets(prices, patterns, trend)
-    
-    # Calculate trend metrics
-    trend_metrics = {
-        'momentum': round((prices[0] - prices[-1]) / prices[-1] * 100, 2),
-        'volatility': round(stdev(prices) / mean(prices) * 100, 2) if len(prices) > 1 else 0,
-        'volume_trend': 'increasing' if volumes[0] > mean(volumes) else 'decreasing'
-    }
-    
-    # Sort targets by confidence
-    sorted_targets = sorted(targets, key=lambda x: x['confidence'], reverse=True)
+    # Calculate price target
+    atr = latest['ATR']
+    if trend == 'Bullish':
+        target = latest['Close'] + (atr * 2)
+    elif trend == 'Bearish':
+        target = latest['Close'] - (atr * 2)
+    else:
+        target = latest['Close']
     
     return {
         'trend': trend,
-        'breakouts': breakouts,
-        'targets': sorted_targets,
-        'metrics': trend_metrics
+        'future_trend': future_trend,
+        'confidence': round(confidence, 2),
+        'target': float(target)
     }
+
+def calculate_projection(df, trend, periods):
+    """Calculate price projection for future periods"""
+    last_price = df['Close'].iloc[-1]
+    atr = df['ATR'].iloc[-1]
+    
+    if trend == 'Bullish':
+        multiplier = 1
+    elif trend == 'Bearish':
+        multiplier = -1
+    else:
+        multiplier = 0
+    
+    return [round(last_price + (atr * multiplier * (i + 1)), 2) for i in range(periods)]
+
+def main():
+    """Main function to handle command line execution"""
+    try:
+        # Get input data from environment variable
+        input_data = os.environ.get('INPUT_DATA')
+        if not input_data:
+            raise ValueError("No input data provided")
+        
+        # Parse input data
+        data = json.loads(input_data)
+        
+        # Generate prediction
+        result = predict_trend(data)
+        
+        # Print result as JSON
+        print(json.dumps(result))
+        
+    except Exception as e:
+        print(json.dumps({
+            'status': 'error',
+            'error': str(e)
+        }))
+
+if __name__ == "__main__":
+    main()
