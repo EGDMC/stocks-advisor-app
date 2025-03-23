@@ -3,16 +3,22 @@
   "version": "1.0.0",
   "description": "Stock market analysis application",
   "scripts": {
-    "build": "cd netlify/functions && npm install && bash build.sh",
+    "build": "cd netlify/functions && bash setup.sh",
     "start": "python src/app.py",
     "test": "python -m pytest"
   },
   "dependencies": {
-    "@types/node": "^16.11.7",
-    "child_process": "^1.0.2"
+    "@types/node": "16.11.7",
+    "child_process": "1.0.2"
+  },
+  "devDependencies": {
+    "npm-force-resolutions": "0.0.10"
   },
   "engines": {
-    "node": ">=16.0.0",
+    "node": "16.x",
     "python": "3.9.18"
+  },
+  "resolutions": {
+    "@types/node": "16.11.7"
   }
 }

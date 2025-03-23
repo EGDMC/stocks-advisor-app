@@ -2,16 +2,23 @@
   "name": "stocks-advisor-functions",
   "version": "1.0.0",
   "description": "Netlify functions for stock market analysis",
-  "main": "app.js",
+  "main": "api.js",
   "dependencies": {
-    "@types/node": "^16.11.7",
-    "child_process": "^1.0.2"
+    "@types/node": "16.11.7",
+    "child_process": "1.0.2"
   },
-  "scripts": {
-    "build": "bash ./build.sh"
+  "devDependencies": {
+    "npm-force-resolutions": "0.0.10"
   },
   "engines": {
-    "node": ">=16.0.0",
+    "node": "16.x",
     "python": "3.9.18"
+  },
+  "resolutions": {
+    "@types/node": "16.11.7"
+  },
+  "scripts": {
+    "preinstall": "npx npm-force-resolutions",
+    "build": "bash setup.sh"
   }
 }
