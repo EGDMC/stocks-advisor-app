@@ -1,173 +1,192 @@
 import subprocess
+import requests
+import time
 import sys
 import os
-import psutil
-import time
-from datetime import datetime
+from pathlib import Path
 
-def get_size_str(bytes_size):
-    """Convert bytes to human readable string"""
-    for unit in ['B', 'KB', 'MB', 'GB']:
-        if bytes_size < 1024:
-            return f"{bytes_size:.2f} {unit}"
-        bytes_size /= 1024
-    return f"{bytes_size:.2f} TB"
+class DockerTester:
+    def __init__(self):
+        self.container_name = "egx30_stock_advisor"
+        self.api_url = "http://localhost:8080"
+        self.errors = []
+        self.warnings = []
 
-def check_docker():
-    """Check if Docker is installed and running"""
-    try:
-        subprocess.run(['docker', '--version'], check=True, capture_output=True)
-        print("✓ Docker is installed")
-    except FileNotFoundError:
-        print("✗ Docker is not installed")
-        print("Please install Docker from: https://docs.docker.com/get-docker/")
-        sys.exit(1)
-    except subprocess.CalledProcessError:
-        print("✗ Error checking Docker version")
-        sys.exit(1)
-
-def check_resources():
-    """Check available system resources"""
-    print("\nSystem Resources:")
-    print("-----------------")
-    
-    # Memory
-    memory = psutil.virtual_memory()
-    print(f"Memory Total: {get_size_str(memory.total)}")
-    print(f"Memory Available: {get_size_str(memory.available)}")
-    print(f"Memory Used: {memory.percent}%")
-    
-    # CPU
-    cpu_count = psutil.cpu_count()
-    cpu_percent = psutil.cpu_percent(interval=1)
-    print(f"\nCPU Cores: {cpu_count}")
-    print(f"CPU Usage: {cpu_percent}%")
-    
-    # Disk
-    disk = psutil.disk_usage('/')
-    print(f"\nDisk Total: {get_size_str(disk.total)}")
-    print(f"Disk Free: {get_size_str(disk.free)}")
-    print(f"Disk Used: {disk.percent}%")
-
-def build_docker():
-    """Build Docker image and report size"""
-    print("\nBuilding Docker Image:")
-    print("---------------------")
-    
-    start_time = time.time()
-    
-    try:
-        # Build the image
-        subprocess.run(['docker', 'build', '-t', 'trading-analysis:test', '.'], check=True)
-        
-        # Get image size
-        result = subprocess.run(
-            ['docker', 'images', 'trading-analysis:test', '--format', '{{.Size}}'],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        image_size = result.stdout.strip()
-        
-        build_time = time.time() - start_time
-        
-        print(f"\n✓ Build successful")
-        print(f"Build time: {build_time:.2f} seconds")
-        print(f"Image size: {image_size}")
-        
-    except subprocess.CalledProcessError as e:
-        print(f"\n✗ Build failed: {e}")
-        print(f"Error output: {e.stderr}")
-        sys.exit(1)
-
-def test_container():
-    """Test running the container locally"""
-    print("\nTesting Container:")
-    print("-----------------")
-    
-    try:
-        # Stop any existing container
-        subprocess.run(
-            ['docker', 'stop', 'trading-analysis-test'],
-            capture_output=True
-        )
-        
-        # Remove any existing container
-        subprocess.run(
-            ['docker', 'rm', 'trading-analysis-test'],
-            capture_output=True
-        )
-        
-        # Run the container
-        print("Starting container...")
-        subprocess.run([
-            'docker', 'run',
-            '--name', 'trading-analysis-test',
-            '-p', '8080:8080',
-            '-d',
-            'trading-analysis:test'
-        ], check=True)
-        
-        # Wait for startup
-        print("Waiting for application startup...")
-        time.sleep(5)
-        
-        # Check container status
-        result = subprocess.run(
-            ['docker', 'ps', '--filter', 'name=trading-analysis-test', '--format', '{{.Status}}'],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        
-        if 'Up' in result.stdout:
-            print("✓ Container running successfully")
-            print("\nTest the application at: http://localhost:8080")
-            print("\nPress Ctrl+C to stop the container...")
-            
-            try:
-                while True:
-                    time.sleep(1)
-            except KeyboardInterrupt:
-                print("\nStopping container...")
-                subprocess.run(['docker', 'stop', 'trading-analysis-test'], check=True)
-                print("Container stopped")
-        else:
-            print("✗ Container not running properly")
-            print("Checking container logs:")
-            subprocess.run(['docker', 'logs', 'trading-analysis-test'])
-            
-    except subprocess.CalledProcessError as e:
-        print(f"✗ Error: {e}")
-        print(f"Error output: {e.stderr}")
-    finally:
-        # Cleanup
+    def run_command(self, command, check=True):
+        """Run a shell command and return output"""
         try:
-            subprocess.run(['docker', 'stop', 'trading-analysis-test'], capture_output=True)
-            subprocess.run(['docker', 'rm', 'trading-analysis-test'], capture_output=True)
-        except:
-            pass
+            result = subprocess.run(
+                command,
+                check=check,
+                capture_output=True,
+                text=True,
+                shell=True
+            )
+            return result
+        except subprocess.CalledProcessError as e:
+            self.errors.append(f"Command failed: {command}\nError: {e.stderr}")
+            return None
+
+    def check_docker_installation(self):
+        """Verify Docker is installed and running"""
+        print("\nChecking Docker installation...")
+        
+        result = self.run_command("docker --version", check=False)
+        if not result or result.returncode != 0:
+            self.errors.append("Docker is not installed")
+            return False
+            
+        result = self.run_command("docker info", check=False)
+        if not result or result.returncode != 0:
+            self.errors.append("Docker daemon is not running")
+            return False
+            
+        print("✓ Docker is installed and running")
+        return True
+
+    def check_docker_compose(self):
+        """Verify docker-compose is installed"""
+        print("\nChecking Docker Compose...")
+        
+        result = self.run_command("docker-compose --version", check=False)
+        if not result or result.returncode != 0:
+            self.errors.append("Docker Compose is not installed")
+            return False
+            
+        print("✓ Docker Compose is installed")
+        return True
+
+    def check_required_files(self):
+        """Check if all required files exist"""
+        print("\nChecking required files...")
+        
+        required_files = [
+            "Dockerfile",
+            "docker-compose.yml",
+            ".env",
+            "requirements.txt",
+            "src/app.py",
+            "src/config.py"
+        ]
+        
+        for file_path in required_files:
+            if not Path(file_path).exists():
+                self.errors.append(f"Missing required file: {file_path}")
+            else:
+                print(f"✓ Found {file_path}")
+
+    def build_image(self):
+        """Attempt to build the Docker image"""
+        print("\nBuilding Docker image...")
+        
+        result = self.run_command("docker-compose build")
+        if result and result.returncode == 0:
+            print("✓ Docker image built successfully")
+            return True
+        return False
+
+    def start_container(self):
+        """Start the Docker container"""
+        print("\nStarting Docker container...")
+        
+        result = self.run_command("docker-compose up -d")
+        if result and result.returncode == 0:
+            print("✓ Container started successfully")
+            return True
+        return False
+
+    def test_api(self):
+        """Test if the API is responding"""
+        print("\nTesting API endpoints...")
+        
+        max_retries = 5
+        retry_delay = 2
+        
+        for i in range(max_retries):
+            try:
+                response = requests.get(f"{self.api_url}/")
+                if response.status_code == 200:
+                    print("✓ API is responding")
+                    return True
+                else:
+                    print(f"Attempt {i+1}/{max_retries}: API returned status {response.status_code}")
+            except requests.exceptions.ConnectionError:
+                if i < max_retries - 1:
+                    print(f"Attempt {i+1}/{max_retries}: API not ready, waiting {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                else:
+                    self.errors.append("API is not responding")
+                    return False
+        return False
+
+    def check_logs(self):
+        """Check container logs for errors"""
+        print("\nChecking container logs...")
+        
+        result = self.run_command(f"docker-compose logs")
+        if result:
+            logs = result.stdout.lower()
+            if 'error' in logs or 'exception' in logs:
+                self.warnings.append("Found potential errors in container logs")
+            print("✓ Container logs checked")
+
+    def cleanup(self):
+        """Stop and remove the container"""
+        print("\nCleaning up...")
+        
+        self.run_command("docker-compose down")
+        print("✓ Cleanup completed")
+
+    def run_tests(self):
+        """Run all tests"""
+        print("=== Running Docker Setup Tests ===")
+        
+        try:
+            if not self.check_docker_installation():
+                return False
+                
+            if not self.check_docker_compose():
+                return False
+                
+            self.check_required_files()
+            
+            if self.errors:
+                print("\nFound errors that must be fixed before continuing.")
+                return False
+            
+            if self.build_image():
+                if self.start_container():
+                    self.test_api()
+                    self.check_logs()
+            
+        finally:
+            self.cleanup()
+        
+        print("\n=== Test Results ===")
+        
+        if self.errors:
+            print("\nErrors (must be fixed):")
+            for error in self.errors:
+                print(f"✗ {error}")
+        
+        if self.warnings:
+            print("\nWarnings (should be investigated):")
+            for warning in self.warnings:
+                print(f"! {warning}")
+        
+        if not self.errors and not self.warnings:
+            print("\n✓ All tests passed! Docker setup is working correctly.")
+        elif not self.errors:
+            print("\n⚠ Tests completed with warnings.")
+        else:
+            print("\n✗ Tests failed. Please fix the errors and try again.")
+        
+        return len(self.errors) == 0
 
 def main():
-    """Main test function"""
-    print("Docker Build Test")
-    print("================\n")
-    
-    # Record start time
-    start_time = datetime.now()
-    print(f"Test started at: {start_time.strftime('%Y-%m-%d %H:%M:%S')}\n")
-    
-    # Run tests
-    check_docker()
-    check_resources()
-    build_docker()
-    test_container()
-    
-    # Report completion
-    end_time = datetime.now()
-    duration = end_time - start_time
-    print(f"\nTest completed at: {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"Total duration: {duration.total_seconds():.2f} seconds")
+    tester = DockerTester()
+    if not tester.run_tests():
+        sys.exit(1)
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

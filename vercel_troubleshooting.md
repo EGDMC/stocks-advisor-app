@@ -1,84 +1,232 @@
-# Vercel Authentication Troubleshooting Guide
+# Vercel Deployment Troubleshooting Guide
 
-## Common Issues & Solutions
+## Common Issues and Solutions
 
-### 1. Login Not Working
-If `vercel login` seems stuck:
-1. Cancel the current process (Ctrl+C)
-2. Try alternative login method:
-```bash
-vercel login --github
+### 1. Size Limit Exceeded (250MB)
+
+**Problem:**
+```
+Error: A Serverless Function has exceeded the unzipped maximum size of 250 MB
 ```
 
-### 2. Manual Authentication
-If automatic browser login fails:
-1. Visit https://vercel.com/dashboard manually
-2. Go to Settings → Tokens
-3. Create a new token
-4. Copy the token
-5. Create/edit `~/.vercel/credentials.json`:
-```json
-{
-  "token": "your_token_here"
-}
+**Solutions:**
+1. Split into smaller components:
+   - Move ML models to Google Cloud Run
+   - Keep only UI components on Vercel
+   - Use API calls for heavy processing
+
+2. Optimize dependencies:
+   ```txt
+   # Remove unnecessary packages
+   dash>=2.14.2
+   dash-bootstrap-components>=1.5.0
+   pandas>=2.1.4
+   plotly>=5.18.0
+   requests>=2.31.0
+   ```
+
+### 2. Build Errors
+
+**Problem:**
+```
+Error: Cannot find module 'X'
 ```
 
-### 3. CLI Issues
-If Vercel CLI is not responding:
-```bash
-# 1. Uninstall Vercel
-npm uninstall -g vercel
+**Solutions:**
+1. Check requirements.txt:
+   ```bash
+   # Verify all dependencies are listed
+   pip freeze > requirements.txt
+   ```
 
-# 2. Clear npm cache
-npm cache clean --force
+2. Update build settings in vercel.json:
+   ```json
+   {
+     "builds": [
+       {
+         "src": "app.py",
+         "use": "@vercel/python",
+         "config": { "maxLambdaSize": "15mb" }
+       }
+     ]
+   }
+   ```
 
-# 3. Reinstall Vercel
-npm install -g vercel@latest
+### 3. Environment Variables
 
-# 4. Try logging in again
-vercel login
+**Problem:**
+```
+Error: Missing environment variable 'X'
 ```
 
-### 4. Project Linking
-If you get project errors:
-```bash
-# Remove existing link
-rm -rf .vercel
+**Solutions:**
+1. Check Vercel Dashboard:
+   - Go to Project Settings
+   - Environment Variables
+   - Add missing variables
 
-# Login and relink
-vercel link
+2. Use .env file locally:
+   ```bash
+   cp .env.example .env
+   # Update values in .env
+   ```
+
+### 4. Runtime Errors
+
+**Problem:**
+```
+Error: Function timed out
 ```
 
-### 5. Environment Variables
-After login succeeds:
-```bash
-# 1. Set up environment variables
-python setup_vercel_env.py
+**Solutions:**
+1. Optimize code:
+   - Cache heavy computations
+   - Use async functions
+   - Minimize database queries
 
-# 2. Verify they're set
-vercel env ls
+2. Update timeout settings:
+   ```json
+   {
+     "functions": {
+       "api/*.py": {
+         "memory": 1024,
+         "maxDuration": 10
+       }
+     }
+   }
+   ```
 
-# 3. Deploy your app
-python deploy.py
+### 5. Path Resolution Issues
+
+**Problem:**
+```
+Error: Module not found in path
 ```
 
-### 6. Network Issues
-- Check if you can access vercel.com
-- Try using a different network
-- Disable VPN if you're using one
-- Check firewall settings
+**Solutions:**
+1. Update PYTHONPATH:
+   ```json
+   {
+     "env": {
+       "PYTHONPATH": "."
+     }
+   }
+   ```
 
-### Getting Help
-1. Run diagnostics:
-```bash
-vercel --debug
-```
+2. Use absolute imports:
+   ```python
+   from src.models import AIPredictor
+   ```
 
-2. Check Vercel status:
-- Visit https://www.vercel-status.com
+## Preventive Measures
 
-3. Contact support:
-- Open an issue at https://github.com/vercel/vercel/issues
-- Join Vercel Discord: https://vercel.com/discord
+1. Test locally first:
+   ```bash
+   vercel dev
+   ```
 
-Remember: You must be logged in before deploying. Run `vercel whoami` to verify your login status.
+2. Check deployment size:
+   ```bash
+   du -sh .vercel/
+   ```
+
+3. Monitor resources:
+   ```bash
+   vercel inspect
+   ```
+
+## Deployment Steps
+
+1. Initialize project:
+   ```bash
+   vercel init
+   ```
+
+2. Configure project:
+   ```bash
+   vercel link
+   ```
+
+3. Set environment variables:
+   ```bash
+   vercel env add
+   ```
+
+4. Deploy:
+   ```bash
+   vercel --prod
+   ```
+
+## Rollback Process
+
+1. List deployments:
+   ```bash
+   vercel ls
+   ```
+
+2. Rollback to previous:
+   ```bash
+   vercel rollback
+   ```
+
+## Performance Optimization
+
+1. Enable caching:
+   ```python
+   @app.cache.memoize(timeout=300)
+   def heavy_computation():
+       pass
+   ```
+
+2. Use CDN:
+   ```json
+   {
+     "headers": [
+       {
+         "source": "/static/(.*)",
+         "headers": [
+           {
+             "key": "Cache-Control",
+             "value": "public, max-age=31536000, immutable"
+           }
+         ]
+       }
+     ]
+   }
+   ```
+
+3. Compress responses:
+   ```python
+   from flask_compress import Compress
+   Compress(app)
+   ```
+
+## Monitoring
+
+1. View logs:
+   ```bash
+   vercel logs
+   ```
+
+2. Check metrics:
+   ```bash
+   vercel insights
+   ```
+
+3. Set up alerts:
+   - Go to Project Settings
+   - Alerts
+   - Configure thresholds
+
+## Support Resources
+
+1. Vercel Documentation:
+   - https://vercel.com/docs
+   - https://vercel.com/guides
+
+2. Community Support:
+   - Discord: https://vercel.com/discord
+   - GitHub Issues: https://github.com/vercel/vercel/issues
+
+3. Status Page:
+   - https://www.vercel-status.com

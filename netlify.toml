@@ -1,0 +1,12 @@
+[build]
+  publish = "public"
+  command = "echo 'No build required'"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[context.production.environment]
+  NODE_VERSION = "16"
+  PYTHON_VERSION = "3.9"

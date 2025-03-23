@@ -1,77 +1,89 @@
-# How to Deploy Your App and Get Your URL
+# EGX 30 Stock Advisor Deployment Guide
 
-1. First, install Node.js if you haven't already:
-   - Download from: https://nodejs.org/
-   - Choose the LTS (Long Term Support) version
+## Current Architecture Issues
+- Vercel 250MB size limit exceeded
+- Heavy ML dependencies
+- Large model files
 
-2. Install Vercel CLI:
-```bash
-npm install -g vercel
-```
+## Solution Architecture
 
-3. Set up your Vercel account:
-```bash
-# This will guide you through account creation and authentication
-python setup_vercel_account.py
-```
+### 1. Local Development
+- Keep full functionality locally
+- Train and test models
+- Full technical analysis
 
-If you already have a Vercel account:
-```bash
-vercel login
-```
+### 2. Cloud Components
 
-4. Set up environment variables:
-```bash
-# This will automatically configure Vercel with your Supabase credentials
-python setup_vercel_env.py
-```
+#### A. Vercel Frontend (Lightweight)
+- Basic UI components
+- Simple charts
+- API calls to other services
+- Requirements:
+  ```
+  dash-core-components
+  dash-html-components
+  plotly (minimal)
+  ```
 
-5. Deploy your app:
-```bash
-vercel --prod
-```
+#### B. Google Cloud Functions (Heavy Processing)
+- ML predictions
+- Technical analysis
+- Model serving
+- Requirements stay in cloud:
+  ```
+  scikit-learn
+  numpy
+  pandas
+  ```
 
-5. Your app URL will be shown after deployment in this format:
-   - Production: https://your-app-name.vercel.app
-   - Preview (for testing): https://your-app-name-git-main-username.vercel.app
+#### C. Supabase (Data Layer)
+- Store market data
+- Cache analysis results
+- Store user configurations
 
-6. You can also find your URL:
-   - Go to https://vercel.com/dashboard
-   - Click on your project
-   - The URL will be shown at the top of the page
+## Deployment Steps
 
-Need help? Run:
-```bash
-python test_setup.py  # to verify Supabase setup
-vercel --help        # to see all deployment options
-```
+1. Split the app:
+   - Move ML models to Google Cloud
+   - Keep UI on Vercel
+   - Use Supabase as data bridge
 
-Monitor Your Deployment:
-1. View deployment status:
-```bash
-vercel logs
-```
+2. Create lightweight Vercel app:
+   ```python
+   # vercel-deploy/app.py
+   import dash
+   from dash import html, dcc
+   import plotly.graph_objects as go
+   import requests
+   
+   # Call Google Cloud for analysis
+   # Display results with minimal processing
+   ```
 
-2. Check deployment URL:
-```bash
-vercel list
-```
+3. Setup Google Cloud Function:
+   ```python
+   # cloud-function/main.py
+   from models.ai_predictor import AIPredictor
+   from models.smc_analyzer import SMCAnalyzer
+   
+   def analyze_market(request):
+       # Handle heavy processing
+       # Return JSON results
+   ```
 
-3. View your project info:
-```bash
-vercel project ls
-```
+4. Use Supabase to:
+   - Store analysis results
+   - Cache predictions
+   - Manage data flow
 
-4. Monitor in Vercel Dashboard:
-- Go to https://vercel.com/dashboard
-- Select your project
-- Click "Deployments" tab
-- View logs and status
+## Benefits
+1. Stay within Vercel limits
+2. Better scalability
+3. Separate concerns
+4. Faster frontend
 
-Troubleshooting:
-- If deployment fails, check logs: `vercel logs`
-- Verify env variables: `vercel env ls`
-- Test locally: `vercel dev`
-- Review build output in Vercel dashboard
-
-Note: Your environment variables are automatically set up by setup_vercel_env.py
+## Next Steps
+1. Create lightweight Vercel frontend
+2. Setup Google Cloud Functions
+3. Configure Supabase data flow
+4. Test distributed system

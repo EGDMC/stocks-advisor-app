@@ -1,120 +1,123 @@
 import os
-import sys
+import shutil
 import subprocess
-from utils.spinner import Spinner
+import json
+from pathlib import Path
 
-def check_vercel():
-    """Check if Vercel CLI is installed"""
-    try:
-        subprocess.run(['vercel', '--version'], 
-                      capture_output=True, 
-                      check=True)
-        return True
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return False
-
-def get_vercel_url():
-    """Get the production URL from Vercel"""
-    try:
-        result = subprocess.run(['vercel', 'ls', '--production'], 
-                              capture_output=True, 
-                              text=True,
-                              check=True)
-        # Parse URL from output
-        for line in result.stdout.split('\n'):
-            if 'egx30-analysis' in line and '.vercel.app' in line:
-                return line.split()[1]
-    except:
-        return None
-
-def deploy():
-    """Deploy the application to Vercel"""
-    print("\n=== EGX 30 Stock Analysis Dashboard Deployment ===")
+def setup_vercel():
+    """Setup Vercel deployment files"""
+    print("Setting up Vercel deployment...")
     
-    # Check for Vercel CLI
-    # Check for Vercel CLI and authentication
-    if not check_vercel():
-        print("❌ Error: Vercel CLI not found or not authenticated.")
-        print("\nTo set up Vercel:")
-        print("1. Install Vercel CLI:")
-        print("   npm install -g vercel")
-        print("\n2. Log in to Vercel:")
-        print("   vercel login")
-        print("\n3. Verify installation:")
-        print("   vercel whoami")
-        print("\n4. Try deploying again")
-        return False
+    # Create vercel-deploy directory if it doesn't exist
+    os.makedirs('vercel-deploy', exist_ok=True)
+    
+    # Copy minimal app
+    shutil.copy2('src/app_minimal.py', 'vercel-deploy/app.py')
+    
+    # Copy necessary files
+    files_to_copy = [
+        'src/database/supabase_handler.py',
+        'src/config.py',
+        '.env',
+    ]
+    
+    for file in files_to_copy:
+        if os.path.exists(file):
+            dest_path = os.path.join('vercel-deploy', os.path.basename(file))
+            shutil.copy2(file, dest_path)
+    
+    print("Vercel setup complete!")
 
-    # Check authentication status
-    try:
-        subprocess.run(['vercel', 'whoami'],
-                      check=True,
-                      capture_output=True)
-    except subprocess.CalledProcessError:
-        print("❌ Error: Not logged in to Vercel.")
-        print("\nPlease authenticate first:")
-        print("1. Run: vercel login")
-        print("2. Follow the browser prompts")
-        print("3. Return here and try deploying again")
-        return False
+def setup_cloud_functions():
+    """Setup Google Cloud Functions deployment files"""
+    print("Setting up Google Cloud Functions...")
     
-    # Check for required files
-    required_files = ['vercel.json', '.env', 'requirements_prod.txt']
-    missing_files = [f for f in required_files if not os.path.exists(f)]
-    if missing_files:
-        print("\n❌ Error: Missing required files:")
-        for file in missing_files:
-            print(f"  - {file}")
-        return False
+    # Create cloud-functions directory
+    os.makedirs('cloud-functions', exist_ok=True)
+    os.makedirs('cloud-functions/models', exist_ok=True)
+    os.makedirs('cloud-functions/utils', exist_ok=True)
     
-    print("\n🚀 Starting deployment process...")
-    spinner = Spinner("Deploying to Vercel")
-    spinner.start()
+    # Copy ML models and utilities
+    files_to_copy = [
+        ('src/models/ai_predictor.py', 'cloud-functions/models/'),
+        ('src/models/smc_analyzer.py', 'cloud-functions/models/'),
+        ('src/models/__init__.py', 'cloud-functions/models/'),
+    ]
     
-    try:
-        # Deploy to Vercel
-        result = subprocess.run(['vercel', '--prod'], 
-                              capture_output=True, 
-                              text=True,
-                              check=True)
-        spinner.stop()
-        
-        # Get the URL
-        url = get_vercel_url()
-        if url:
-            print("\n✅ Deployment successful!")
-            print("\n📱 Your app is now live at:")
-            print(f"   {url}")
-            
-            # Try to open URL in browser
-            try:
-                import webbrowser
-                webbrowser.open(url)
-                print("\n🌐 Opening your app in the browser...")
-            except:
-                print("\n🌐 Visit your app URL in your browser")
-            
-            print("\n📊 Next steps:")
-            print("1. Log in to the admin dashboard")
-            print("2. Upload your market data")
-            print("3. Monitor your app in Vercel dashboard")
-            print("\n💡 Tip: Run 'vercel logs' to monitor your app")
-            return True
-        else:
-            print("\n⚠️ Deployment successful but couldn't fetch URL.")
-            print("Visit https://vercel.com/dashboard to find your app URL")
-            return True
-            
-    except subprocess.CalledProcessError as e:
-        spinner.stop()
-        print("\n❌ Deployment failed!")
-        print("\nError details:")
-        print(e.stderr)
-        print("\nTroubleshooting steps:")
-        print("1. Verify your Vercel account is properly set up")
-        print("2. Check your internet connection")
-        print("3. Try running 'vercel' manually for more details")
-        return False
+    for src, dest in files_to_copy:
+        if os.path.exists(src):
+            shutil.copy2(src, dest)
+    
+    print("Google Cloud Functions setup complete!")
 
-if __name__ == '__main__':
-    sys.exit(0 if deploy() else 1)
+def create_deployment_config():
+    """Create deployment configuration files"""
+    config = {
+        'vercel': {
+            'app_path': 'vercel-deploy/app.py',
+            'requirements': 'vercel-deploy/requirements.txt',
+            'env_vars': [
+                'SUPABASE_URL',
+                'SUPABASE_KEY'
+            ]
+        },
+        'google_cloud': {
+            'function_name': 'analyze_market',
+            'runtime': 'python39',
+            'memory': '1024MB',
+            'timeout': '120s'
+        }
+    }
+    
+    with open('deployment_config.json', 'w') as f:
+        json.dump(config, f, indent=2)
+
+def check_prerequisites():
+    """Check if all necessary tools are installed"""
+    requirements = {
+        'vercel': 'vercel --version',
+        'gcloud': 'gcloud --version',
+        'python': 'python --version'
+    }
+    
+    missing = []
+    for tool, command in requirements.items():
+        try:
+            subprocess.run(command.split(), capture_output=True)
+            print(f"✓ {tool} is installed")
+        except FileNotFoundError:
+            missing.append(tool)
+            print(f"✗ {tool} is not installed")
+    
+    return len(missing) == 0
+
+def main():
+    print("=== EGX 30 Stock Advisor Deployment Setup ===")
+    
+    if not check_prerequisites():
+        print("\nPlease install missing prerequisites and try again.")
+        return
+    
+    print("\nStarting deployment setup...")
+    
+    # Create deployment directories
+    setup_vercel()
+    setup_cloud_functions()
+    
+    # Create config files
+    create_deployment_config()
+    
+    print("\nDeployment setup complete!")
+    print("""
+Next steps:
+1. Review deployment_config.json
+2. Set up environment variables
+3. Deploy to Vercel:
+   vercel vercel-deploy
+4. Deploy to Google Cloud:
+   cd cloud-functions
+   gcloud functions deploy analyze_market --trigger-http
+    """)
+
+if __name__ == "__main__":
+    main()

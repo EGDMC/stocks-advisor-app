@@ -1,21 +1,80 @@
-# Ignore model files
-models/
-data/
-sample_data/
-
-# Ignore development files
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
 .env
-.env.example
-.git/
+.venv
+venv/
+ENV/
+
+# ML Models
+models/*.joblib
+models/*.npy
+models/*.h5
+models/*.pkl
+models/*.model
+
+# Development
+.git
+.github
 .gitignore
-.venv/
-test_setup.py
-how_to_deploy.md
-vercel_troubleshooting.md
-setup_vercel_account.py
-setup_vercel_env.py
-manual_vercel_setup.md
-deploy.py
-login_vercel.py
+.pytest_cache
+.coverage
+htmlcov/
+.tox/
+.vscode/
+*.log
+
+# Data
+data/*.csv
+data/*.json
+sample_data/
+test_data/
+
+# Documentation
+docs/
+*.md
+LICENSE
+
+# Development configs
+setup_*.py
+test_*.py
+deploy_*.py
+Dockerfile
+docker-compose.yml
+
+# Cloud Functions
+cloud-functions/
+cloud_run/
+
+# Source files not needed for Vercel
+src/models/
+src/database/
+src/utils/
+src/app.py
+src/main.py
+src/config.py
+
+# Keep only minimal deployment files
+!vercel-deploy/app.py
+!vercel-deploy/requirements.txt
+!vercel-deploy/vercel.json

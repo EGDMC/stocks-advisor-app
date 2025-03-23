@@ -1,140 +1,128 @@
-# EGX 30 Stock Analysis Dashboard
+# EGX 30 Stock Advisor
 
-A web application for analyzing EGX 30 stock market data with AI predictions and technical analysis.
+A machine learning-powered stock advisor for the Egyptian Exchange (EGX 30) index, providing market analysis and trading recommendations.
 
-## Deployment Guide
+## Features
 
-### 1. Supabase Setup
-1. Create a free account at [Supabase](https://supabase.com)
-2. Create a new project
-3. Set up the database tables:
-   - Go to SQL Editor in your Supabase dashboard
-   - Open `src/database/tables.sql`
-   - Copy and paste the SQL code into the editor
-   - Click "Run" to create all required tables:
-     * `market_data`: Stores price history with date, OHLCV data
-     * `analysis_results`: Stores analysis results with trends and recommendations
-     * `model_predictions`: Stores AI predictions with confidence levels
-4. Copy your credentials:
-   - Go to Project Settings > API
-   - Copy the Project URL
-   - Copy the `anon` public key
+- 📈 Technical Analysis
+- 🤖 Machine Learning Predictions
+- 📊 Interactive Charts
+- 📱 Responsive Web Interface
+- 🔄 Real-time Updates
+- 📝 Detailed Reports
 
-### 2. Environment Setup
-1. Create a `.env` file from the template:
+## Project Structure
+
+```
+├── src/                  # Source code
+│   ├── models/          # ML models
+│   ├── database/        # Database handlers
+│   ├── utils/           # Utilities
+│   └── app.py          # Main application
+├── data/                # Data directory
+├── models/              # Trained models
+├── public/              # Static files
+└── netlify/             # Netlify configuration
+    └── functions/       # Serverless functions
+```
+
+## Setup
+
+1. Clone the repository:
 ```bash
-cp .env.example .env
-```
-2. Add your Supabase credentials to `.env`:
-```
-SUPABASE_URL=your_project_url
-SUPABASE_KEY=your_anon_key
+git clone https://github.com/yourusername/egx30-stock-advisor.git
+cd egx30-stock-advisor
 ```
 
-### 3. Test Your Setup
-1. Run the enhanced setup verification script:
+2. Create virtual environment:
 ```bash
-python test_setup.py
+python -m venv .venv
+source .venv/bin/activate  # Linux/Mac
+# OR
+.\.venv\Scripts\activate  # Windows
 ```
 
-The script provides an interactive and user-friendly setup experience:
-
-📦 Package Installation
-- Automatically installs required dependencies
-- Verifies Python environment
-- Handles version compatibility
-- Manages all necessary packages
-
-🔑 Configuration Setup
-- Guides you through creating the `.env` file
-- Helps input your Supabase credentials
-- Validates configuration format
-- Tests connectivity in real-time
-
-🛠️ Database Setup
-- Creates required tables automatically
-- Verifies table permissions
-- Tests data operations
-- Ensures proper indexing
-
-🔍 Verification Steps
-1. Network connectivity check
-2. Supabase credential validation
-3. Database table creation/verification
-4. Data operation testing
-5. Permission validation
-
-❌ Error Handling
-- Clear error messages with solutions
-- Step-by-step troubleshooting guides
-- Links to relevant documentation
-- Auto-recovery suggestions
-
-If you encounter issues:
-1. Follow the on-screen troubleshooting steps
-2. Check Supabase project settings
-3. Verify your credentials in `.env`
-4. Ensure tables are created (use `src/database/tables.sql`)
-5. Review logs for detailed error messages
-
-The app will not deploy successfully until all tests pass.
-
-### 4. Vercel Deployment
-1. Install Vercel CLI:
-```bash
-npm install -g vercel
-```
-
-2. Login to Vercel:
-```bash
-vercel login
-```
-
-3. Deploy the app:
-```bash
-vercel
-```
-
-4. Add environment variables in Vercel:
-   - Go to your project settings
-   - Add SUPABASE_URL and SUPABASE_KEY
-   - Redeploy the application
-
-### 4. Access Your App
-- Once deployed, Vercel will provide you with a URL
-- Your app will be accessible 24/7 at that URL
-- Data will be stored persistently in Supabase
-
-## Local Development
-
-1. Install dependencies:
+3. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-2. Run the app:
+4. Set up environment variables:
+```bash
+cp .env.example .env
+# Edit .env with your credentials
+```
+
+## Local Development
+
+1. Start the development server:
 ```bash
 python src/app.py
 ```
 
-## Features
-- Real-time market analysis
-- AI-powered predictions
-- Technical analysis with support/resistance levels
-- Interactive charts
-- Persistent data storage
-- Custom data upload support
+2. Visit `http://localhost:8080` in your browser
 
-## Stack
-- Frontend: Dash/Plotly
-- Backend: Python/Flask
+## Deployment
+
+### Netlify
+
+1. Connect your GitHub repository to Netlify
+2. Set up environment variables in Netlify dashboard
+3. Deploy!
+
+## Architecture
+
+- Frontend: Dash + Bootstrap
+- Backend: Python Flask
+- ML Models: Scikit-learn
 - Database: Supabase
-- Hosting: Vercel
-- AI: Scikit-learn
+- Hosting: Netlify
+
+## API Reference
+
+### Analysis Endpoint
+
+```http
+POST /api/analyze
+```
+
+Request Body:
+```json
+{
+    "type": "bullish|bearish|custom",
+    "data": {
+        "dates": [...],
+        "prices": [...],
+        "volumes": [...]
+    }
+}
+```
+
+Response:
+```json
+{
+    "trend": "Bullish|Bearish",
+    "prediction": "Up|Down",
+    "confidence": 95.5,
+    "recommendation": "BUY|SELL|WAIT"
+}
+```
+
+## Environment Variables
+
+- `SUPABASE_URL`: Supabase project URL
+- `SUPABASE_KEY`: Supabase API key
+- `API_KEY`: Application API key
+- `DEBUG`: Debug mode (True/False)
 
 ## Contributing
+
 1. Fork the repository
-2. Create your feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a new Pull Request
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

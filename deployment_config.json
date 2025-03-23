@@ -1,0 +1,26 @@
+{
+    "vercel": {
+        "app_path": "vercel-deploy/app.py",
+        "requirements": "vercel-deploy/requirements.txt",
+        "env_vars": [
+            "SUPABASE_URL",
+            "SUPABASE_KEY"
+        ]
+    },
+    "google_cloud": {
+        "function_name": "analyze_market",
+        "runtime": "python39",
+        "memory": "1024MB",
+        "timeout": "120s",
+        "region": "us-central1",
+        "env_vars": [
+            "SUPABASE_URL",
+            "SUPABASE_KEY"
+        ]
+    },
+    "docker": {
+        "image_name": "egx30-stock-advisor",
+        "port": 8080,
+        "env_file": ".env"
+    }
+}

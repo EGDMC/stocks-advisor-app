@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from trading_advisor import TradingAdvisor
 from database.supabase_handler import SupabaseHandler
-from config import SUPABASE_URL, SUPABASE_KEY, DEFAULT_BULLISH_DATA, DEFAULT_BEARISH_DATA
+from config import SUPABASE_URL, SUPABASE_KEY, DEFAULT_BULLISH_DATA, DEFAULT_BEARISH_DATA, MODEL_PATH
 
 # Initialize Supabase client
 db = SupabaseHandler(SUPABASE_URL, SUPABASE_KEY)
@@ -62,7 +62,8 @@ def update_output(n_clicks, analysis_type, contents, filename):
         advisor = TradingAdvisor()
         
         # Check if model exists, if not train it
-        model_path = f'models/default_mlp_model'
+        # Use MODEL_PATH from config.py instead of hardcoding
+        model_path = MODEL_PATH
         if not os.path.exists(f'{model_path}_mlp.joblib'):
             print("Training new model...")
             advisor.train_ai_model(df)

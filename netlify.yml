@@ -1,0 +1,49 @@
+plugins:
+  - package: "@netlify/plugin-functions-install-core"
+    config:
+      # Force installation of Python
+      forceInstall: true
+      
+  - package: "@netlify/plugin-python"
+    config:
+      pythonVersion: "3.9"
+      packageManager: "pip"
+      requirements: "netlify/functions/requirements.txt"
+      
+build:
+  command: |
+    cd netlify/functions
+    chmod +x build.sh
+    ./build.sh
+  publish: "public"
+  functions: "netlify/functions"
+  environment:
+    PYTHON_VERSION: "3.9"
+    NODE_VERSION: "14"
+    
+functions:
+  "*":
+    included_files:
+      - "netlify/functions/**"
+    external_node_modules:
+      - "@types/node"
+    
+# Redirect all requests to our function
+redirects:
+  - from: "/*"
+    to: "/.netlify/functions/index"
+    status: 200
+    force: true
+
+# Headers for security
+headers:
+  - path: "/*"
+    headers:
+      - key: X-Frame-Options
+        value: DENY
+      - key: X-XSS-Protection
+        value: 1; mode=block
+      - key: X-Content-Type-Options
+        value: nosniff
+      - key: Referrer-Policy
+        value: strict-origin-when-cross-origin

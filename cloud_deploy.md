@@ -1,113 +1,152 @@
-# Deploying to Google Cloud Run
+# Google Cloud Functions Deployment Guide
 
-This guide explains how to deploy the Trading Analysis application to Google Cloud Run.
+## Overview
+This guide explains how to deploy the heavy processing components of the EGX 30 Stock Advisor to Google Cloud Functions.
 
 ## Prerequisites
+1. Google Cloud account
+2. Google Cloud SDK installed
+3. Project created on Google Cloud Console
 
-1. Install Google Cloud SDK:
-   - Visit: https://cloud.google.com/sdk/docs/install
-   - Follow the installation instructions for your operating system
+## Setup Steps
 
-2. Initialize Google Cloud:
-   ```bash
-   gcloud init
-   ```
+### 1. Install Google Cloud SDK
+```bash
+# Install from https://cloud.google.com/sdk/docs/install
+gcloud init
+gcloud auth login
+```
 
-3. Set up a Google Cloud project:
-   ```bash
-   # Create new project
-   gcloud projects create [PROJECT_ID]
-   
-   # Set project
-   gcloud config set project [PROJECT_ID]
-   
-   # Enable required APIs
-   gcloud services enable cloudbuild.googleapis.com
-   gcloud services enable run.googleapis.com
-   ```
+### 2. Structure Cloud Functions
 
-## Deployment Steps
+Create a directory structure:
+```
+cloud-functions/
+├── main.py              # Main function handler
+├── requirements.txt     # Dependencies
+├── models/             # ML models
+│   ├── __init__.py
+│   ├── ai_predictor.py
+│   └── smc_analyzer.py
+└── utils/              # Helper functions
+```
 
-1. Install deployment requirements:
-   ```bash
-   pip install -r requirements.txt
-   ```
+### 3. Create Cloud Function Requirements
+```txt
+# cloud-functions/requirements.txt
+numpy==1.24.3
+pandas==2.1.4
+scikit-learn==1.3.0
+joblib==1.3.2
+plotly==5.18.0
+```
 
-2. Run the deployment script:
-   ```bash
-   python deploy_cloud.py
-   ```
+### 4. Create Main Function Handler
+```python
+# cloud-functions/main.py
+from models.ai_predictor import AIPredictor
+from models.smc_analyzer import SMCAnalyzer
+import functions_framework
+import json
 
-The script will:
-- Build the Docker container
-- Upload it to Google Container Registry
-- Deploy to Cloud Run
-- Configure scaling and resources
-- Output the service URL
+@functions_framework.http
+def analyze_market(request):
+    """Cloud Function entry point"""
+    # Enable CORS
+    headers = {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST',
+        'Access-Control-Allow-Headers': 'Content-Type'
+    }
+    
+    if request.method == 'OPTIONS':
+        return ('', 204, headers)
+    
+    try:
+        # Get data from request
+        request_json = request.get_json()
+        data = request_json['data']
+        
+        # Initialize models
+        advisor = AIPredictor()
+        analyzer = SMCAnalyzer()
+        
+        # Perform analysis
+        results = {
+            'ai_prediction': advisor.predict(data),
+            'market_structure': analyzer.analyze(data)
+        }
+        
+        return (json.dumps(results), 200, headers)
+        
+    except Exception as e:
+        return (json.dumps({'error': str(e)}), 500, headers)
+```
 
-## Verification
+### 5. Deploy Function
+```bash
+cd cloud-functions
+gcloud functions deploy analyze_market \
+    --runtime python39 \
+    --trigger-http \
+    --allow-unauthenticated \
+    --memory 1024MB \
+    --timeout 120s
+```
 
-Once deployed, you can:
-1. Visit the provided URL
-2. Upload a stock data file
-3. Verify all analysis features work correctly
+### 6. Update Frontend Configuration
+Add the Cloud Function URL to your environment variables:
+```
+GOOGLE_CLOUD_FUNCTION_URL=https://YOUR_REGION-YOUR_PROJECT.cloudfunctions.net/analyze_market
+```
+
+### 7. Test Deployment
+```python
+import requests
+
+# Test cloud function
+url = "YOUR_FUNCTION_URL"
+data = {
+    "data": {
+        "dates": [...],
+        "prices": [...]
+    }
+}
+
+response = requests.post(url, json=data)
+print(response.json())
+```
+
+## Memory Management Tips
+1. Load models lazily
+2. Use smaller data chunks
+3. Clean up resources after use
+4. Monitor memory usage
+
+## Error Handling
+1. Implement proper error handling
+2. Return meaningful error messages
+3. Log errors for debugging
 
 ## Monitoring
-
-Monitor your deployment:
-```bash
-# View logs
-gcloud logging tail "resource.type=cloud_run_revision"
-
-# Check service status
-gcloud run services describe trading-analysis
-
-# View metrics
-gcloud run services describe trading-analysis --format='yaml(status.traffic,status.url)'
-```
-
-## Troubleshooting
-
-1. If deployment fails:
-   ```bash
-   # View build logs
-   gcloud builds list
-   gcloud builds log [BUILD_ID]
-   ```
-
-2. If service fails:
-   ```bash
-   # View service logs
-   gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=trading-analysis"
-   ```
-
-3. Memory issues:
-   - Increase memory allocation in `deploy_cloud.py`
-   - Modify the `--memory` flag value
-
-4. Scaling issues:
-   - Adjust `--max-instances` in `deploy_cloud.py`
-   - Monitor concurrent requests
+1. Set up Cloud Monitoring
+2. Configure alerts
+3. Monitor function performance
 
 ## Cost Management
+1. Set budget alerts
+2. Monitor function invocations
+3. Optimize cold starts
+4. Use appropriate memory settings
 
-The free tier includes:
-- 2 million requests per month
-- 360,000 GB-seconds of memory
-- 180,000 vCPU-seconds of compute time
+## Security
+1. Set up IAM roles
+2. Implement authentication
+3. Secure sensitive data
+4. Use environment variables
 
-Monitor usage:
-```bash
-gcloud billing accounts list
-gcloud alpha billing accounts get-spend-information
-```
-
-## Cleanup
-
-To remove the deployment:
-```bash
-# Delete Cloud Run service
-gcloud run services delete trading-analysis --platform managed --region us-central1
-
-# Delete container images
-gcloud container images delete gcr.io/[PROJECT_ID]/trading-analysis
+## Next Steps
+1. Monitor function performance
+2. Optimize based on usage patterns
+3. Implement caching if needed
+4. Set up CI/CD pipeline

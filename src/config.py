@@ -9,7 +9,8 @@ SUPABASE_URL = os.getenv('SUPABASE_URL')
 SUPABASE_KEY = os.getenv('SUPABASE_KEY')
 
 # Model configuration
-MODEL_PATH = 'models/default_mlp_model'
+# Use one of the verified working models from the file system
+MODEL_PATH = 'models/trained_model'
 
 # Analysis configuration
 ANALYSIS_WINDOW = 20
