@@ -2,23 +2,124 @@ body {
     background-color: #f8f9fa;
 }
 
+.container {
+    padding-top: 2rem;
+    padding-bottom: 2rem;
+}
+
 .card {
     margin-bottom: 20px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border: none;
+}
+
+.card-header {
+    background-color: #fff;
+    border-bottom: 1px solid rgba(0,0,0,0.1);
 }
 
 #loading {
     text-align: center;
-    padding: 20px;
+    padding: 2rem;
+    background-color: rgba(255,255,255,0.9);
+    border-radius: 4px;
+}
+
+#loading:after {
+    content: '';
+    display: inline-block;
+    width: 2rem;
+    height: 2rem;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #007bff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-left: 1rem;
+    vertical-align: middle;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 
 .alert {
-    padding: 10px 15px;
+    padding: 1rem;
     border-radius: 4px;
-    margin-bottom: 15px;
+    margin-bottom: 1rem;
+    border-left-width: 4px;
+}
+
+.alert-success {
+    border-left-color: #28a745;
+}
+
+.alert-danger {
+    border-left-color: #dc3545;
+}
+
+.alert-warning {
+    border-left-color: #ffc107;
 }
 
 .navbar {
-    margin-bottom: 30px;
+    margin-bottom: 2rem;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.btn-primary {
+    padding: 0.5rem 2rem;
+}
+
+#technicalIndicators .card {
+    height: 100%;
+    transition: transform 0.2s;
+}
+
+#technicalIndicators .card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+#technicalIndicators .card-title {
+    color: #6c757d;
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+}
+
+#technicalIndicators .card-text {
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #212529;
+}
+
+#priceChart {
+    margin: 1rem 0;
+    background-color: white;
+    padding: 1rem;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.prediction-card {
+    background-color: #f8f9fa;
+    padding: 1.5rem;
+    border-radius: 4px;
+    margin-top: 1rem;
+}
+
+.prediction-card h5 {
+    margin-bottom: 1rem;
+    color: #495057;
+}
+
+.form-control {
+    border-radius: 4px;
+    border: 1px solid #ced4da;
+    padding: 0.75rem;
+}
+
+.form-control:focus {
+    border-color: #80bdff;
+    box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
 }
