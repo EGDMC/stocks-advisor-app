@@ -1,7 +1,7 @@
 [build]
   publish = "public"
   functions = "netlify/functions"
-  command = "pip install -r netlify/functions/requirements.txt"
+  command = "bash netlify/functions/build.sh"
 
 [functions]
   node_bundler = "esbuild"
@@ -10,6 +10,7 @@
 [build.environment]
   PYTHON_VERSION = "3.9"
   NODE_VERSION = "16"
+  PYTHONPATH = "/opt/build/repo/netlify/functions"
 
 [[redirects]]
   from = "/"
@@ -20,31 +21,37 @@
   from = "/api/analyze"
   to = "/.netlify/functions/smc_analyzer"
   status = 200
+  force = true
 
 [[redirects]]
   from = "/api/technical"
   to = "/.netlify/functions/technical_indicators"
   status = 200
+  force = true
 
 [[redirects]]
   from = "/api/pattern"
   to = "/.netlify/functions/pattern_recognition"
   status = 200
+  force = true
 
 [[redirects]]
   from = "/api/trend"
   to = "/.netlify/functions/trend_prediction"
   status = 200
+  force = true
 
 [[redirects]]
   from = "/api/chart"
   to = "/.netlify/functions/charts"
   status = 200
+  force = true
 
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
   status = 200
+  force = true
 
 [[headers]]
   for = "/*"
