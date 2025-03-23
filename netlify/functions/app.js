@@ -1,30 +1,38 @@
+
 const { spawn } = require('child_process');
 const path = require('path');
 
-// Handler for Netlify Functions
 exports.handler = async (event, context) => {
-  // Set Python path and script path
-  const pythonPath = path.join(__dirname, '.python_env/bin/python');
-  const scriptPath = path.join(__dirname, 'app.py');
+  // Handle health checks
+  if (event.httpMethod === 'GET' && event.path === '/.netlify/functions/app/health') {
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        status: 'healthy',
+        version: '1.0.0',
+        timestamp: new Date().toISOString()
+      })
+    };
+  }
 
   // Parse request details
-  const { path: reqPath, httpMethod, body } = event;
-
-  // Create environment for Python process
-  const env = {
-    ...process.env,
-    PATH: process.env.PATH,
-    PYTHONPATH: process.env.PYTHONPATH || '.',
-    REQUEST_PATH: reqPath,
-    REQUEST_METHOD: httpMethod,
-    REQUEST_BODY: body || ''
-  };
-
+  const requestPath = event.path.replace('/.netlify/functions/app', '');
+  
   try {
     // Spawn Python process
-    const pythonProcess = spawn('python', [scriptPath], { env });
+    const pythonPath = path.join(__dirname, '.python_env/bin/python');
+    const scriptPath = path.join(__dirname, 'handler.py');
+    
+    const pythonProcess = spawn('python', [scriptPath], {
+      env: {
+        ...process.env,
+        REQUEST_PATH: requestPath,
+        REQUEST_METHOD: event.httpMethod,
+        REQUEST_BODY: event.body || ''
+      }
+    });
 
-    // Collect data from Python process
+    // Get response from Python
     return new Promise((resolve, reject) => {
       let result = '';
       let error = '';
@@ -42,7 +50,7 @@ exports.handler = async (event, context) => {
           resolve({
             statusCode: 500,
             body: JSON.stringify({
-              error: 'Internal Server Error',
+              error: 'Internal server error',
               details: error
             })
           });
@@ -63,23 +71,12 @@ exports.handler = async (event, context) => {
           }
         }
       });
-
-      pythonProcess.on('error', (err) => {
-        resolve({
-          statusCode: 500,
-          body: JSON.stringify({
-            error: 'Failed to start Python process',
-            details: err.message
-          })
-        });
-      });
     });
-
   } catch (error) {
     return {
       statusCode: 500,
       body: JSON.stringify({
-        error: 'Internal Server Error',
+        error: 'Internal server error',
         details: error.message
       })
     };

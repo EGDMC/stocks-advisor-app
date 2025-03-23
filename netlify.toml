@@ -1,12 +1,29 @@
+
 [build]
   publish = "public"
-  command = "echo 'No build required'"
+  functions = "netlify/functions"
+  command = "chmod +x netlify/functions/build.sh && ./netlify/functions/build.sh"
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/app/:splat"
+  status = 200
+  force = true
 
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
 
-[context.production.environment]
-  NODE_VERSION = "16"
+[functions]
+  node_bundler = "esbuild"
+
+[build.environment]
   PYTHON_VERSION = "3.9"
+
+[[headers]]
+  for = "/*"
+    [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Methods = "GET, POST, OPTIONS"
+    Access-Control-Allow-Headers = "Content-Type"
