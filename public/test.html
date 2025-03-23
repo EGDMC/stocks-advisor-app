@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Test - EGX 30 Stock Advisor</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .result {
+            margin-top: 20px;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            white-space: pre-wrap;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>API Test</h1>
+        <p>Test the EGX 30 Stock Advisor API endpoints</p>
+
+        <div>
+            <h3>Test Analysis Endpoint</h3>
+            <button onclick="testAnalyze()">Test Analysis</button>
+            <div id="analyzeResult" class="result"></div>
+        </div>
+
+        <div>
+            <h3>Test Health Check</h3>
+            <button onclick="testHealth()">Test Health</button>
+            <div id="healthResult" class="result"></div>
+        </div>
+    </div>
+
+    <script>
+        async function testAnalyze() {
+            const resultDiv = document.getElementById('analyzeResult');
+            resultDiv.textContent = 'Testing...';
+
+            try {
+                const response = await fetch('/.netlify/functions/analyze', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        type: 'bullish',
+                        data: {
+                            dates: ['2024-01-01', '2024-01-02'],
+                            prices: [100, 102],
+                            volumes: [1000, 1100]
+                        }
+                    })
+                });
+
+                const data = await response.json();
+                resultDiv.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                resultDiv.textContent = `Error: ${error.message}`;
+            }
+        }
+
+        async function testHealth() {
+            const resultDiv = document.getElementById('healthResult');
+            resultDiv.textContent = 'Testing...';
+
+            try {
+                const response = await fetch('/.netlify/functions/health');
+                const text = await response.text();
+                resultDiv.textContent = text;
+            } catch (error) {
+                resultDiv.textContent = `Error: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>
