@@ -48,22 +48,28 @@ exports.handler = async (event, context) => {
             const header = lines[0].split(',').map(col => col.trim());
 
             // Verify required columns
-            const requiredColumns = ['Date', 'Close', 'Volume'];
+            const requiredColumns = ['date', 'open', 'high', 'low', 'close', 'volume'];
             const missingColumns = requiredColumns.filter(col => !header.includes(col));
             if (missingColumns.length > 0) {
                 throw new Error(`Missing required columns: ${missingColumns.join(', ')}`);
             }
 
             // Extract column indices
-            const dateIndex = header.indexOf('Date');
-            const closeIndex = header.indexOf('Close');
-            const volumeIndex = header.indexOf('Volume');
+            const dateIndex = header.indexOf('date');
+            const openIndex = header.indexOf('open');
+            const highIndex = header.indexOf('high');
+            const lowIndex = header.indexOf('low');
+            const closeIndex = header.indexOf('close');
+            const volumeIndex = header.indexOf('volume');
 
             // Process data rows
             const data = lines.slice(1).map(line => {
                 const values = line.split(',').map(val => val.trim());
                 return {
                     date: values[dateIndex],
+                    open: parseFloat(values[openIndex]),
+                    high: parseFloat(values[highIndex]),
+                    low: parseFloat(values[lowIndex]),
                     close: parseFloat(values[closeIndex]),
                     volume: parseInt(values[volumeIndex])
                 };
@@ -74,8 +80,11 @@ exports.handler = async (event, context) => {
                 type: requestBody.type || 'standard',
                 data: {
                     dates: data.map(row => row.date),
-                    prices: data.map(row => row.close),
-                    volumes: data.map(row => row.volume)
+                    open: data.map(row => row.open),
+                    high: data.map(row => row.high),
+                    low: data.map(row => row.low),
+                    close: data.map(row => row.close),
+                    volume: data.map(row => row.volume)
                 }
             };
 
@@ -104,11 +113,13 @@ exports.handler = async (event, context) => {
 
                 pythonProcess.on('close', (code) => {
                     if (code !== 0) {
+                        console.error('Python error:', error);
                         reject(new Error(error || 'Python process failed'));
                     } else {
                         try {
                             resolve(JSON.parse(output));
                         } catch (e) {
+                            console.error('JSON parse error:', e);
                             reject(new Error('Invalid JSON output from Python script'));
                         }
                     }
