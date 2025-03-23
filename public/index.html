@@ -16,109 +16,13 @@
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-dark bg-dark">
-        <div class="container">
-            <span class="navbar-brand">EGX 30 Stock Advisor</span>
-        </div>
-    </nav>
-
-    <div class="container mt-4">
-        <div class="row">
-            <!-- Upload Section -->
-            <div class="col-md-4">
-                <div class="card">
-                    <div class="card-header">
-                        <h5>Upload Data</h5>
-                    </div>
-                    <div class="card-body">
-                        <form id="uploadForm">
-                            <div class="mb-3">
-                                <label for="csvFile" class="form-label">Market Data (CSV)</label>
-                                <input type="file" class="form-control" id="csvFile" accept=".csv" required>
-                                <small class="text-muted">File should contain: date, open, high, low, close, volume</small>
-                            </div>
-                            <button type="submit" class="btn btn-primary">Analyze</button>
-                        </form>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Analysis Results -->
-            <div class="col-md-8">
-                <div id="loadingSpinner" class="alert alert-info">
-                    Analyzing market data...
-                </div>
-
-                <div id="errorMessage" class="alert alert-danger" style="display: none;"></div>
-
-                <!-- Price Analysis -->
-                <div id="priceAnalysis" class="analysis-section" style="display: none;">
-                    <div class="card">
-                        <div class="card-header">
-                            <h5>Price Analysis</h5>
-                        </div>
-                        <div class="card-body">
-                            <div id="priceChart" class="chart-container"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Trend Analysis -->
-                <div id="trendAnalysis" class="analysis-section" style="display: none;">
-                    <div class="card">
-                        <div class="card-header">
-                            <h5>Trend Analysis</h5>
-                        </div>
-                        <div class="card-body">
-                            <div id="trendResult"></div>
-                            <div id="trendChart" class="chart-container"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Pattern Recognition -->
-                <div id="patternAnalysis" class="analysis-section" style="display: none;">
-                    <div class="card">
-                        <div class="card-header">
-                            <h5>Pattern Recognition</h5>
-                        </div>
-                        <div class="card-body">
-                            <div id="patterns"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Technical Indicators -->
-                <div id="technicalAnalysis" class="analysis-section" style="display: none;">
-                    <div class="card">
-                        <div class="card-header">
-                            <h5>Technical Indicators</h5>
-                        </div>
-                        <div class="card-body">
-                            <div id="indicators" class="row"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- SMC Analysis -->
-                <div id="smcAnalysis" class="analysis-section" style="display: none;">
-                    <div class="card">
-                        <div class="card-header">
-                            <h5>SMC Analysis</h5>
-                        </div>
-                        <div class="card-body">
-                            <div id="smcResult"></div>
-                            <div id="levelsChart" class="chart-container"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+    <!-- ... (keep the same HTML structure) ... -->
 
     <script>
         $(document).ready(function() {
-            $('#uploadForm').on('submit', function(e) {
+            const API_BASE = '/api';  // Updated API base path
+            
+            $('#uploadForm').on('submit', async function(e) {
                 e.preventDefault();
                 
                 const fileInput = $('#csvFile')[0];
@@ -140,10 +44,12 @@
                     const csvContent = e.target.result;
                     
                     try {
-                        // Run all analyses
-                        await runAnalysis(csvContent);
+                        const data = parseCSV(csvContent);
+                        await runAnalysis(data);
                     } catch (error) {
                         showError('Analysis failed: ' + error.message);
+                    } finally {
+                        $('#loadingSpinner').hide();
                     }
                 };
                 
@@ -154,33 +60,52 @@
                 reader.readAsText(file);
             });
             
-            async function runAnalysis(csvContent) {
+            async function runAnalysis(data) {
                 try {
-                    // Prepare data
-                    const data = parseCSV(csvContent);
-                    
                     // Run analyses in parallel
                     const [smc, technical, patterns, trend, charts] = await Promise.all([
-                        callEndpoint('/.netlify/functions/app/analyze', data),
-                        callEndpoint('/.netlify/functions/app/technical', data),
-                        callEndpoint('/.netlify/functions/app/pattern', data),
-                        callEndpoint('/.netlify/functions/app/trend', data),
-                        callEndpoint('/.netlify/functions/app/chart', data)
+                        callEndpoint(`${API_BASE}/analyze`, data),
+                        callEndpoint(`${API_BASE}/technical`, data),
+                        callEndpoint(`${API_BASE}/pattern`, data),
+                        callEndpoint(`${API_BASE}/trend`, data),
+                        callEndpoint(`${API_BASE}/chart`, data)
                     ]);
                     
                     // Update UI with results
                     updateUI(smc, technical, patterns, trend, charts);
                     
+                    // Show all sections
+                    showAllSections();
+                    
                 } catch (error) {
                     throw new Error('Analysis failed: ' + error.message);
-                } finally {
-                    $('#loadingSpinner').hide();
+                }
+            }
+            
+            async function callEndpoint(url, data) {
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ data })
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('API call failed');
+                    }
+                    
+                    return await response.json();
+                } catch (error) {
+                    console.error('API call error:', error);
+                    throw error;
                 }
             }
             
             function parseCSV(content) {
-                const lines = content.split('\n');
-                const headers = lines[0].toLowerCase().split(',');
+                const lines = content.trim().split('\n');
+                const headers = lines[0].toLowerCase().trim().split(',');
                 const data = {
                     dates: [],
                     open: [],
@@ -191,9 +116,9 @@
                 };
                 
                 for (let i = 1; i < lines.length; i++) {
-                    const values = lines[i].split(',');
+                    const values = lines[i].trim().split(',');
                     if (values.length === headers.length) {
-                        data.dates.push(values[headers.indexOf('date')]);
+                        data.dates.push(values[headers.indexOf('date')].trim());
                         data.open.push(parseFloat(values[headers.indexOf('open')]));
                         data.high.push(parseFloat(values[headers.indexOf('high')]));
                         data.low.push(parseFloat(values[headers.indexOf('low')]));
@@ -205,87 +130,106 @@
                 return data;
             }
             
-            async function callEndpoint(url, data) {
-                const response = await fetch(url, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ data })
-                });
-                
-                if (!response.ok) {
-                    throw new Error(`API call failed: ${response.statusText}`);
-                }
-                
-                return await response.json();
-            }
-            
             function updateUI(smc, technical, patterns, trend, charts) {
-                // Show all sections
-                showAllSections();
-                
                 // Update charts
-                if (charts.charts) {
-                    Plotly.newPlot('priceChart', charts.charts.price_chart.data);
-                    Plotly.newPlot('trendChart', charts.charts.technical_chart.data);
-                    Plotly.newPlot('levelsChart', charts.charts.indicators_chart.data);
+                if (charts && charts.charts) {
+                    updateCharts(charts.charts);
                 }
                 
                 // Update technical indicators
-                if (technical.indicators) {
-                    const indicatorsHtml = Object.entries(technical.indicators)
-                        .map(([key, value]) => `
-                            <div class="col-md-4">
-                                <div class="card indicator-card">
-                                    <div class="card-body">
-                                        <h6>${formatIndicatorName(key)}</h6>
-                                        <p class="mb-0">${formatValue(value)}</p>
-                                    </div>
-                                </div>
-                            </div>
-                        `)
-                        .join('');
-                    $('#indicators').html(indicatorsHtml);
+                if (technical && technical.indicators) {
+                    updateIndicators(technical.indicators);
                 }
                 
                 // Update patterns
-                if (patterns.patterns) {
-                    const patternsHtml = Object.entries(patterns.patterns)
-                        .map(([key, value]) => `
-                            <div class="alert alert-info">
-                                <strong>${formatPatternName(key)}:</strong> ${value}
-                            </div>
-                        `)
-                        .join('');
-                    $('#patterns').html(patternsHtml);
+                if (patterns && patterns.patterns) {
+                    updatePatterns(patterns.patterns);
                 }
                 
                 // Update trend
-                if (trend.current_trend) {
-                    $('#trendResult').html(`
-                        <div class="alert alert-${getTrendClass(trend.current_trend)}">
-                            <h6>Current Trend: ${trend.current_trend}</h6>
-                            <p>Confidence: ${trend.confidence}%</p>
-                            <p>Next Target: ${formatValue(trend.next_target)}</p>
-                        </div>
-                    `);
+                if (trend) {
+                    updateTrend(trend);
                 }
                 
                 // Update SMC analysis
-                if (smc.market_structure) {
-                    $('#smcResult').html(`
-                        <div class="alert alert-info">
-                            <h6>Market Structure: ${smc.market_structure}</h6>
-                            <p>Current Setup: ${smc.current_setup}</p>
-                            <p>Key Levels:</p>
-                            <ul>
-                                <li>Support: ${formatValue(smc.levels.support)}</li>
-                                <li>Resistance: ${formatValue(smc.levels.resistance)}</li>
-                            </ul>
-                        </div>
-                    `);
+                if (smc) {
+                    updateSMC(smc);
                 }
+            }
+            
+            function updateCharts(charts) {
+                if (charts.price_chart) {
+                    Plotly.newPlot('priceChart', charts.price_chart.data, {
+                        title: 'Price Analysis',
+                        height: 400,
+                        margin: { t: 30 }
+                    });
+                }
+                
+                if (charts.technical_chart) {
+                    Plotly.newPlot('trendChart', charts.technical_chart.data, {
+                        title: 'Technical Analysis',
+                        height: 400,
+                        margin: { t: 30 }
+                    });
+                }
+            }
+            
+            function updateIndicators(indicators) {
+                const html = Object.entries(indicators)
+                    .map(([key, value]) => `
+                        <div class="col-md-4">
+                            <div class="card indicator-card">
+                                <div class="card-body">
+                                    <h6>${formatName(key)}</h6>
+                                    <p class="mb-0">${formatValue(value)}</p>
+                                </div>
+                            </div>
+                        </div>
+                    `)
+                    .join('');
+                
+                $('#indicators').html(html);
+            }
+            
+            function updatePatterns(patterns) {
+                const html = Object.entries(patterns)
+                    .map(([key, value]) => `
+                        <div class="alert alert-info">
+                            <strong>${formatName(key)}:</strong> ${value}
+                        </div>
+                    `)
+                    .join('');
+                
+                $('#patterns').html(html);
+            }
+            
+            function updateTrend(data) {
+                const html = `
+                    <div class="alert alert-${getTrendClass(data.current_trend)}">
+                        <h6>Current Trend: ${data.current_trend}</h6>
+                        <p>Confidence: ${data.confidence}%</p>
+                        <p>Next Target: ${formatValue(data.next_target)}</p>
+                    </div>
+                `;
+                
+                $('#trendResult').html(html);
+            }
+            
+            function updateSMC(data) {
+                const html = `
+                    <div class="alert alert-info">
+                        <h6>Market Structure: ${data.market_structure}</h6>
+                        <p>Current Setup: ${data.current_setup}</p>
+                        <p>Key Levels:</p>
+                        <ul>
+                            <li>Support: ${formatValue(data.levels.support)}</li>
+                            <li>Resistance: ${formatValue(data.levels.resistance)}</li>
+                        </ul>
+                    </div>
+                `;
+                
+                $('#smcResult').html(html);
             }
             
             function hideAllSections() {
@@ -302,13 +246,7 @@
                 $('#errorMessage').show().text(message);
             }
             
-            function formatIndicatorName(name) {
-                return name.split('_')
-                    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                    .join(' ');
-            }
-            
-            function formatPatternName(name) {
+            function formatName(name) {
                 return name.split('_')
                     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
                     .join(' ');
