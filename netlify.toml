@@ -1,25 +1,34 @@
-
 [build]
   publish = "public"
   functions = "netlify/functions"
   command = "chmod +x netlify/functions/build.sh && ./netlify/functions/build.sh"
+
+[functions]
+  external_node_modules = ["@types/node"]
+  node_bundler = "esbuild"
+
+[build.environment]
+  PYTHON_VERSION = "3.9"
+  NODE_VERSION = "16"
+  # Production environment variables
+  SUPABASE_URL = "https://vkiqitvhfyvqomvkmglz.supabase.co"
+  SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZraXFpdHZoZnl2cW9tdmttZ2x6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDkxNzE2MTcsImV4cCI6MjAyNDc0NzYxN30.PomX5qS0oRd3kcPvkf6PMYJIAhy29mbgvzJ5XGjgcW8"
+  DEBUG = "False"
+  HOST = "0.0.0.0"
+  MODEL_PATH = "models/trained_model.joblib"
+  MODEL_TYPE = "rf"
+  PORT = "8080"
+
+[[redirects]]
+  from = "/"
+  to = "/index.html"
+  status = 200
 
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/app/:splat"
   status = 200
   force = true
-
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
-
-[functions]
-  node_bundler = "esbuild"
-
-[build.environment]
-  PYTHON_VERSION = "3.9"
 
 [[headers]]
   for = "/*"
