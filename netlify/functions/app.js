@@ -1,84 +1,128 @@
-
 const { spawn } = require('child_process');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
+const formidable = require('formidable');
 
 exports.handler = async (event, context) => {
-  // Handle health checks
-  if (event.httpMethod === 'GET' && event.path === '/.netlify/functions/app/health') {
+  // Set CORS headers
+  const headers = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS'
+  };
+
+  // Handle preflight OPTIONS request
+  if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 200,
-      body: JSON.stringify({
-        status: 'healthy',
-        version: '1.0.0',
-        timestamp: new Date().toISOString()
-      })
+      headers,
+      body: ''
     };
   }
 
-  // Parse request details
-  const requestPath = event.path.replace('/.netlify/functions/app', '');
-  
-  try {
-    // Spawn Python process
-    const pythonPath = path.join(__dirname, '.python_env/bin/python');
-    const scriptPath = path.join(__dirname, 'handler.py');
-    
-    const pythonProcess = spawn('python', [scriptPath], {
-      env: {
-        ...process.env,
-        REQUEST_PATH: requestPath,
-        REQUEST_METHOD: event.httpMethod,
-        REQUEST_BODY: event.body || ''
+  // Handle GET request (health check)
+  if (event.httpMethod === 'GET') {
+    if (event.path.endsWith('/health')) {
+      return {
+        statusCode: 200,
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'healthy',
+          version: '1.0.0',
+          timestamp: new Date().toISOString()
+        })
+      };
+    }
+  }
+
+  // Handle POST request (file analysis)
+  if (event.httpMethod === 'POST') {
+    try {
+      // Parse multipart form data
+      const form = new formidable.IncomingForm();
+      form.uploadDir = os.tmpdir();
+      form.keepExtensions = true;
+
+      // Get the uploaded file
+      const [fields, files] = await new Promise((resolve, reject) => {
+        form.parse(event, (err, fields, files) => {
+          if (err) reject(err);
+          resolve([fields, files]);
+        });
+      });
+
+      const file = files.file;
+      if (!file) {
+        throw new Error('No file uploaded');
       }
-    });
 
-    // Get response from Python
-    return new Promise((resolve, reject) => {
-      let result = '';
-      let error = '';
+      // Read file content
+      const fileContent = fs.readFileSync(file.path, 'utf-8');
 
-      pythonProcess.stdout.on('data', (data) => {
-        result += data.toString();
-      });
-
-      pythonProcess.stderr.on('data', (data) => {
-        error += data.toString();
-      });
-
-      pythonProcess.on('close', (code) => {
-        if (code !== 0) {
-          resolve({
-            statusCode: 500,
-            body: JSON.stringify({
-              error: 'Internal server error',
-              details: error
-            })
-          });
-        } else {
-          try {
-            const response = JSON.parse(result);
-            resolve({
-              statusCode: 200,
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(response)
-            });
-          } catch (e) {
-            resolve({
-              statusCode: 200,
-              headers: { 'Content-Type': 'text/html' },
-              body: result
-            });
-          }
+      // Call Python script for analysis
+      const pythonProcess = spawn('python', [
+        path.join(__dirname, 'handler.py')
+      ], {
+        env: {
+          ...process.env,
+          FILE_CONTENT: fileContent
         }
       });
-    });
-  } catch (error) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({
-        error: 'Internal server error',
-        details: error.message
-      })
-    };
+
+      // Get response from Python script
+      const result = await new Promise((resolve, reject) => {
+        let output = '';
+        let error = '';
+
+        pythonProcess.stdout.on('data', (data) => {
+          output += data.toString();
+        });
+
+        pythonProcess.stderr.on('data', (data) => {
+          error += data.toString();
+        });
+
+        pythonProcess.on('close', (code) => {
+          if (code !== 0) {
+            reject(new Error(`Python process exited with code ${code}: ${error}`));
+          } else {
+            try {
+              resolve(JSON.parse(output));
+            } catch (e) {
+              reject(new Error('Invalid JSON response from Python script'));
+            }
+          }
+        });
+      });
+
+      // Clean up temporary file
+      fs.unlinkSync(file.path);
+
+      // Return analysis results
+      return {
+        statusCode: 200,
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(result)
+      };
+
+    } catch (error) {
+      console.error('Error:', error);
+      return {
+        statusCode: 500,
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          error: 'Internal server error',
+          message: error.message
+        })
+      };
+    }
   }
+
+  // Handle unsupported methods
+  return {
+    statusCode: 405,
+    headers,
+    body: JSON.stringify({ error: 'Method not allowed' })
+  };
 };

@@ -1,114 +1,172 @@
-import dash
-from dash import html, dcc, Input, Output, State
-import pandas as pd
 import os
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-from trading_advisor import TradingAdvisor
-from database.supabase_handler import SupabaseHandler
-from config import SUPABASE_URL, SUPABASE_KEY, DEFAULT_BULLISH_DATA, DEFAULT_BEARISH_DATA, MODEL_PATH
+import json
+import pandas as pd
+import numpy as np
+from datetime import datetime
+import io
+import sys
 
-# Initialize Supabase client
-db = SupabaseHandler(SUPABASE_URL, SUPABASE_KEY)
-
-def update_output(n_clicks, analysis_type, contents, filename):
-    if n_clicks == 0:
-        return ''
-    
+def analyze_data(file_content):
+    """Analyze market data from CSV content"""
     try:
-        # Get the data based on analysis type
-        if analysis_type == 'bullish':
-            try:
-                # Try to get from Supabase first
-                df = db.get_market_data()
-                if df.empty:
-                    # If no data in Supabase, load from file and save to Supabase
-                    df = pd.read_csv(DEFAULT_BULLISH_DATA)
-                    db.save_market_data(df)
-            except Exception as e:
-                print(f"Error accessing Supabase: {e}")
-                # Fallback to file
-                df = pd.read_csv(DEFAULT_BULLISH_DATA)
-                
-        elif analysis_type == 'bearish':
-            df = pd.read_csv(DEFAULT_BEARISH_DATA)
-            
-        elif analysis_type == 'custom':
-            if contents is None:
-                return html.Div('Please upload a file for custom analysis', style={'color': 'red'})
-            df = parse_contents(contents, filename)
-            if df is None:
-                return html.Div([
-                    html.P('Error: Unable to process the uploaded file.', style={'fontWeight': 'bold'}),
-                    html.P('Please ensure your file:'),
-                    html.Ul([
-                        html.Li('Is a valid CSV file'),
-                        html.Li(['Has all required columns: ', html.Code('date,open,high,low,close,volume')]),
-                        html.Li(['Date values are in ', html.Code('YYYY-MM-DD'), ' format']),
-                        html.Li('Contains numeric values for price and volume data')
-                    ])
-                ], style={'color': 'red', 'backgroundColor': '#ffe6e6', 'padding': '15px', 'borderRadius': '5px'})
-            
-            try:
-                # Save custom data to Supabase
-                db.save_market_data(df)
-            except Exception as e:
-                print(f"Error saving to Supabase: {e}")
-                
-        else:
-            return html.Div('Invalid analysis type selected', style={'color': 'red'})
+        # Read CSV content
+        df = pd.read_csv(io.StringIO(file_content))
         
-        # Initialize advisor and ensure model is trained
-        advisor = TradingAdvisor()
+        # Ensure required columns exist
+        required_columns = ['Date', 'Close', 'Volume']
+        for col in required_columns:
+            if col not in df.columns:
+                raise ValueError(f"Missing required column: {col}")
         
-        # Check if model exists, if not train it
-        # Use MODEL_PATH from config.py instead of hardcoding
-        model_path = MODEL_PATH
-        if not os.path.exists(f'{model_path}_mlp.joblib'):
-            print("Training new model...")
-            advisor.train_ai_model(df)
-            advisor.save_models(model_path)
-        else:
-            print("Loading existing model...")
-            advisor.load_models(model_path)
-            
-        # Run analysis
-        analysis = advisor.analyze_trade_setup(df)
-
-        # Save analysis results to Supabase
-        try:
-            db.save_analysis_result({
-                'type': analysis_type,
-                'trend': analysis['market_structure']['trend'],
-                'prediction': analysis['ai_prediction']['movement'],
-                'confidence': analysis['ai_prediction']['confidence'],
-                'recommendation': analysis['trade_recommendation']['action'],
-                'summary': analysis['summary']
-            })
-        except Exception as e:
-            print(f"Error saving analysis to Supabase: {e}")
+        # Convert Date column
+        df['Date'] = pd.to_datetime(df['Date'])
         
-        # Create chart
-        fig = create_price_chart(df, analysis)
+        # Sort by date
+        df = df.sort_values('Date')
         
-        # Display results with chart
-        return html.Div([
-            html.H3('Analysis Results'),
-            # Interactive Chart
-            html.Div([
-                dcc.Graph(figure=fig)
-            ], style={'marginBottom': '20px'}),
-            # Analysis Details
-            html.Div([
-                html.P(f"Market Trend: {analysis['market_structure']['trend']}"),
-                html.P(f"AI Prediction: {analysis['ai_prediction']['movement']} "
-                      f"({analysis['ai_prediction']['change_percent']:+.2f}%)"),
-                html.P(f"Confidence: {analysis['ai_prediction']['confidence']:.1f}%"),
-                html.P(f"Recommended Action: {analysis['trade_recommendation']['action']}"),
-                html.Hr(),
-                html.P(f"Summary: {analysis['summary']}")
-            ], style={'backgroundColor': '#f8f9fa', 'padding': '20px', 'borderRadius': '5px'})
-        ])
+        # Calculate basic indicators
+        df['SMA_20'] = df['Close'].rolling(window=20).mean()
+        df['SMA_50'] = df['Close'].rolling(window=50).mean()
+        df['RSI'] = calculate_rsi(df['Close'])
+        
+        # Determine trend
+        trend = determine_trend(df)
+        
+        # Prepare chart data
+        chart_data = prepare_chart_data(df)
+        
+        # Generate prediction
+        prediction = generate_prediction(df)
+        
+        return {
+            'status': 'success',
+            'trend': trend,
+            'chart_data': chart_data,
+            'indicators': {
+                'sma_20': float(df['SMA_20'].iloc[-1]),
+                'sma_50': float(df['SMA_50'].iloc[-1]),
+                'rsi': float(df['RSI'].iloc[-1]),
+                'volume': int(df['Volume'].iloc[-1])
+            },
+            'prediction': prediction
+        }
         
     except Exception as e:
-        return html.Div(f'Error: {str(e)}', style={'color': 'red'})
+        return {
+            'status': 'error',
+            'error': str(e),
+            'details': {
+                'type': type(e).__name__,
+                'message': str(e)
+            }
+        }
+
+def calculate_rsi(prices, periods=14):
+    """Calculate Relative Strength Index"""
+    deltas = np.diff(prices)
+    seed = deltas[:periods+1]
+    up = seed[seed >= 0].sum()/periods
+    down = -seed[seed < 0].sum()/periods
+    rs = up/down
+    rsi = np.zeros_like(prices)
+    rsi[:periods] = 100. - 100./(1. + rs)
+    
+    for i in range(periods, len(prices)):
+        delta = deltas[i - 1]
+        if delta > 0:
+            upval = delta
+            downval = 0.
+        else:
+            upval = 0.
+            downval = -delta
+            
+        up = (up*(periods - 1) + upval)/periods
+        down = (down*(periods - 1) + downval)/periods
+        rs = up/down
+        rsi[i] = 100. - 100./(1. + rs)
+        
+    return rsi
+
+def determine_trend(df):
+    """Determine market trend"""
+    last_sma_20 = df['SMA_20'].iloc[-1]
+    last_sma_50 = df['SMA_50'].iloc[-1]
+    last_close = df['Close'].iloc[-1]
+    
+    if last_close > last_sma_20 and last_sma_20 > last_sma_50:
+        return 'Bullish'
+    elif last_close < last_sma_20 and last_sma_20 < last_sma_50:
+        return 'Bearish'
+    else:
+        return 'Neutral'
+
+def prepare_chart_data(df):
+    """Prepare data for Plotly charts"""
+    return [{
+        'x': df['Date'].dt.strftime('%Y-%m-%d').tolist(),
+        'y': df['Close'].tolist(),
+        'type': 'scatter',
+        'name': 'Price'
+    }, {
+        'x': df['Date'].dt.strftime('%Y-%m-%d').tolist(),
+        'y': df['SMA_20'].tolist(),
+        'type': 'scatter',
+        'name': 'SMA 20'
+    }, {
+        'x': df['Date'].dt.strftime('%Y-%m-%d').tolist(),
+        'y': df['SMA_50'].tolist(),
+        'type': 'scatter',
+        'name': 'SMA 50'
+    }]
+
+def generate_prediction(df):
+    """Generate simple prediction based on technical indicators"""
+    last_close = df['Close'].iloc[-1]
+    last_sma_20 = df['SMA_20'].iloc[-1]
+    last_sma_50 = df['SMA_50'].iloc[-1]
+    last_rsi = df['RSI'].iloc[-1]
+    
+    # Simple prediction logic
+    if last_close > last_sma_20 and last_rsi < 70:
+        direction = "Up"
+        confidence = min(90, 60 + ((last_close - last_sma_20) / last_sma_20 * 100))
+        recommendation = "BUY"
+    elif last_close < last_sma_20 and last_rsi > 30:
+        direction = "Down"
+        confidence = min(90, 60 + ((last_sma_20 - last_close) / last_sma_20 * 100))
+        recommendation = "SELL"
+    else:
+        direction = "Sideways"
+        confidence = 50
+        recommendation = "HOLD"
+    
+    return {
+        'direction': direction,
+        'confidence': round(confidence, 2),
+        'recommendation': recommendation,
+        'timestamp': datetime.now().isoformat()
+    }
+
+def main():
+    """Main function to handle requests"""
+    try:
+        # Get file content from environment variable
+        file_content = os.environ.get('FILE_CONTENT')
+        if not file_content:
+            raise ValueError("No file content provided")
+            
+        # Analyze data
+        result = analyze_data(file_content)
+        
+        # Print result as JSON
+        print(json.dumps(result))
+        
+    except Exception as e:
+        print(json.dumps({
+            'status': 'error',
+            'error': str(e)
+        }))
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
