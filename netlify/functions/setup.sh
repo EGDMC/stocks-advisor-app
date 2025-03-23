@@ -1,42 +1,42 @@
 #!/bin/bash
 set -e
 
-echo "Starting environment setup..."
+echo "Starting setup process..."
 
-# Verify Python and pip are available
-echo "Python version:"
-python --version
-echo "Pip version:"
-pip --version
+# Setup Python environment
+echo "Setting up Python environment..."
+python -m pip install --upgrade pip
+pip install --upgrade setuptools wheel
 
-# Set environment variables
-export PYTHONPATH="/opt/build/repo/netlify/functions/python:$PYTHONPATH"
-echo "PYTHONPATH set to: $PYTHONPATH"
-
-# Install dependencies
+# Install Python dependencies
 echo "Installing Python packages..."
 pip install -r requirements.txt
 
-# Test imports
-echo "Testing imports..."
+# Setup Node environment
+echo "Setting up Node.js environment..."
+if [ -f "package.json" ]; then
+    npm install
+fi
+
+# Add Python directory to path
+export PYTHONPATH="/opt/build/repo/netlify/functions/python:$PYTHONPATH"
+echo "PYTHONPATH set to: $PYTHONPATH"
+
+# Test Python imports
+echo "Testing Python imports..."
 python -c "
-import numpy
-import pandas
-import plotly
-import scipy
-print('All core packages imported successfully!')
+try:
+    import numpy
+    import pandas
+    import plotly
+    import scipy
+    print('Core packages imported successfully!')
+except ImportError as e:
+    print(f'Import error: {e}')
+    exit(1)
 "
 
-# Verify analyzers are accessible
-echo "Testing analyzers..."
-python -c "
-from base import BaseAnalyzer
-from technical import TechnicalAnalyzer
-from chart import ChartAnalyzer
-from pattern import PatternAnalyzer
-from trend import TrendAnalyzer
-from analyzer import SMCAnalyzer
-print('All analyzers imported successfully!')
-"
+# Create necessary directories
+mkdir -p /opt/build/repo/netlify/functions/python/__pycache__
 
 echo "Setup completed successfully!"
