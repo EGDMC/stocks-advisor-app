@@ -1,128 +1,94 @@
-const { spawn } = require('child_process');
-const path = require('path');
-const fs = require('fs');
-const os = require('os');
-const formidable = require('formidable');
-
 exports.handler = async (event, context) => {
-  // Set CORS headers
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS'
-  };
-
-  // Handle preflight OPTIONS request
-  if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers,
-      body: ''
+    // Set CORS headers
+    const headers = {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Methods': 'POST, GET, OPTIONS'
     };
-  }
 
-  // Handle GET request (health check)
-  if (event.httpMethod === 'GET') {
-    if (event.path.endsWith('/health')) {
-      return {
-        statusCode: 200,
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          status: 'healthy',
-          version: '1.0.0',
-          timestamp: new Date().toISOString()
-        })
-      };
+    // Handle preflight requests
+    if (event.httpMethod === 'OPTIONS') {
+        return {
+            statusCode: 200,
+            headers,
+            body: ''
+        };
     }
-  }
 
-  // Handle POST request (file analysis)
-  if (event.httpMethod === 'POST') {
-    try {
-      // Parse multipart form data
-      const form = new formidable.IncomingForm();
-      form.uploadDir = os.tmpdir();
-      form.keepExtensions = true;
+    // Handle GET requests (health check)
+    if (event.httpMethod === 'GET') {
+        return {
+            statusCode: 200,
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                status: 'healthy',
+                timestamp: new Date().toISOString()
+            })
+        };
+    }
 
-      // Get the uploaded file
-      const [fields, files] = await new Promise((resolve, reject) => {
-        form.parse(event, (err, fields, files) => {
-          if (err) reject(err);
-          resolve([fields, files]);
-        });
-      });
+    // Handle POST requests
+    if (event.httpMethod === 'POST') {
+        try {
+            // Parse request body
+            const requestBody = JSON.parse(event.body);
+            
+            // Log request for debugging
+            console.log('Received request:', {
+                method: event.httpMethod,
+                path: event.path,
+                bodyLength: event.body.length
+            });
 
-      const file = files.file;
-      if (!file) {
-        throw new Error('No file uploaded');
-      }
-
-      // Read file content
-      const fileContent = fs.readFileSync(file.path, 'utf-8');
-
-      // Call Python script for analysis
-      const pythonProcess = spawn('python', [
-        path.join(__dirname, 'handler.py')
-      ], {
-        env: {
-          ...process.env,
-          FILE_CONTENT: fileContent
-        }
-      });
-
-      // Get response from Python script
-      const result = await new Promise((resolve, reject) => {
-        let output = '';
-        let error = '';
-
-        pythonProcess.stdout.on('data', (data) => {
-          output += data.toString();
-        });
-
-        pythonProcess.stderr.on('data', (data) => {
-          error += data.toString();
-        });
-
-        pythonProcess.on('close', (code) => {
-          if (code !== 0) {
-            reject(new Error(`Python process exited with code ${code}: ${error}`));
-          } else {
-            try {
-              resolve(JSON.parse(output));
-            } catch (e) {
-              reject(new Error('Invalid JSON response from Python script'));
+            // Check if CSV content is provided
+            if (!requestBody.csv_content) {
+                throw new Error('No CSV content provided');
             }
-          }
-        });
-      });
 
-      // Clean up temporary file
-      fs.unlinkSync(file.path);
+            // Basic CSV validation
+            const lines = requestBody.csv_content.split('\n');
+            if (lines.length < 2) {
+                throw new Error('CSV must contain at least a header and one data row');
+            }
 
-      // Return analysis results
-      return {
-        statusCode: 200,
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify(result)
-      };
+            // Parse header
+            const header = lines[0].split(',');
+            if (!header.includes('Date') || !header.includes('Close') || !header.includes('Volume')) {
+                throw new Error('CSV must contain Date, Close, and Volume columns');
+            }
 
-    } catch (error) {
-      console.error('Error:', error);
-      return {
-        statusCode: 500,
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          error: 'Internal server error',
-          message: error.message
-        })
-      };
+            // Return a test response
+            return {
+                statusCode: 200,
+                headers: { ...headers, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: 'CSV received and validated',
+                    rows: lines.length - 1,
+                    columns: header,
+                    sample: {
+                        header: lines[0],
+                        firstRow: lines[1]
+                    }
+                })
+            };
+
+        } catch (error) {
+            console.error('Error:', error);
+            return {
+                statusCode: 400,
+                headers: { ...headers, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    error: error.message || 'Invalid request',
+                    details: error.stack
+                })
+            };
+        }
     }
-  }
 
-  // Handle unsupported methods
-  return {
-    statusCode: 405,
-    headers,
-    body: JSON.stringify({ error: 'Method not allowed' })
-  };
+    // Handle unsupported methods
+    return {
+        statusCode: 405,
+        headers,
+        body: JSON.stringify({ error: 'Method not allowed' })
+    };
 };
