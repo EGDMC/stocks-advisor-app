@@ -1,176 +1,221 @@
+import json
+import os
 import numpy as np
-from typing import List, Dict, Any
+import pandas as pd
+from datetime import datetime
 
-def detect_order_blocks(highs: np.ndarray, lows: np.ndarray, closes: np.ndarray, volumes: np.ndarray) -> List[Dict[str, Any]]:
-    """Detect institutional order blocks based on price action and volume."""
-    order_blocks = []
-    lookback = 10  # Look back period for order block detection
-    
-    for i in range(len(closes)-lookback, 0, -1):
-        # Bullish order block conditions
-        if (closes[i] > closes[i-1] and    # Strong close
-            volumes[i] > np.mean(volumes[i:i+lookback]) * 1.5 and  # High volume
-            any(closes[i:i+lookback] > closes[i] * 1.02)):  # Price moved away
-            
-            order_blocks.append({
-                'type': 'bullish',
-                'price_high': highs[i],
-                'price_low': lows[i],
-                'volume': volumes[i],
-                'strength': volumes[i] / np.mean(volumes[i:i+lookback]),
-                'index': i
-            })
+def analyze_market_data(data):
+    """Analyze market data using SMC principles"""
+    try:
+        # Convert data to DataFrame
+        df = pd.DataFrame({
+            'Date': data['dates'],
+            'Open': data['open'],
+            'High': data['high'],
+            'Low': data['low'],
+            'Close': data['close'],
+            'Volume': data['volume']
+        })
         
-        # Bearish order block conditions
-        elif (closes[i] < closes[i-1] and  # Strong drop
-              volumes[i] > np.mean(volumes[i:i+lookback]) * 1.5 and  # High volume
-              any(closes[i:i+lookback] < closes[i] * 0.98)):  # Price moved away
-            
-            order_blocks.append({
-                'type': 'bearish',
-                'price_high': highs[i],
-                'price_low': lows[i],
-                'volume': volumes[i],
-                'strength': volumes[i] / np.mean(volumes[i:i+lookback]),
-                'index': i
-            })
-    
-    return order_blocks
+        # Convert Date to datetime
+        df['Date'] = pd.to_datetime(df['Date'])
+        df.set_index('Date', inplace=True)
+        
+        # Calculate technical indicators
+        df['SMA_20'] = df['Close'].rolling(window=20).mean()
+        df['SMA_50'] = df['Close'].rolling(window=50).mean()
+        df['RSI'] = calculate_rsi(df['Close'])
+        df['ADX'] = calculate_adx(df)
+        
+        # Determine trend
+        trend = determine_trend(df)
+        
+        # Generate chart data
+        chart_data = generate_chart_data(df)
+        
+        # Generate prediction
+        prediction = generate_prediction(df)
+        
+        return {
+            'status': 'success',
+            'trend': trend,
+            'chart_data': chart_data,
+            'indicators': {
+                'sma_20': float(df['SMA_20'].iloc[-1]) if not pd.isna(df['SMA_20'].iloc[-1]) else None,
+                'sma_50': float(df['SMA_50'].iloc[-1]) if not pd.isna(df['SMA_50'].iloc[-1]) else None,
+                'rsi': float(df['RSI'].iloc[-1]) if not pd.isna(df['RSI'].iloc[-1]) else None,
+                'adx': float(df['ADX'].iloc[-1]) if not pd.isna(df['ADX'].iloc[-1]) else None,
+                'volume': int(df['Volume'].iloc[-1])
+            },
+            'prediction': prediction
+        }
+        
+    except Exception as e:
+        return {
+            'status': 'error',
+            'error': str(e),
+            'details': {
+                'type': type(e).__name__,
+                'traceback': str(e)
+            }
+        }
 
-def analyze_volume_profile(prices: np.ndarray, volumes: np.ndarray, num_bins: int = 50) -> Dict[str, Any]:
-    """Analyze volume distribution across price levels."""
-    # Create price bins
-    price_bins = np.linspace(min(prices), max(prices), num_bins)
-    volume_profile = np.zeros(num_bins-1)
+def calculate_rsi(prices, period=14):
+    """Calculate Relative Strength Index"""
+    deltas = np.diff(prices)
+    seed = deltas[:period+1]
+    up = seed[seed >= 0].sum()/period
+    down = -seed[seed < 0].sum()/period
+    rs = up/down if down != 0 else 0
+    rsi = np.zeros_like(prices)
+    rsi[:period] = 100. - 100./(1. + rs)
     
-    # Calculate volume for each price level
-    for i in range(len(prices)):
-        bin_idx = np.digitize(prices[i], price_bins) - 1
-        if 0 <= bin_idx < len(volume_profile):
-            volume_profile[bin_idx] += volumes[i]
+    for i in range(period, len(prices)):
+        delta = deltas[i-1]
+        if delta > 0:
+            upval = delta
+            downval = 0.
+        else:
+            upval = 0.
+            downval = -delta
+            
+        up = (up*(period-1) + upval)/period
+        down = (down*(period-1) + downval)/period
+        rs = up/down if down != 0 else 0
+        rsi[i] = 100. - 100./(1. + rs)
+        
+    return rsi
+
+def calculate_adx(df, period=14):
+    """Calculate Average Directional Index"""
+    df = df.copy()
+    df['TR'] = np.maximum(df['High'] - df['Low'], 
+                         np.maximum(abs(df['High'] - df['Close'].shift(1)),
+                                  abs(df['Low'] - df['Close'].shift(1))))
+    df['DMplus'] = np.where((df['High'] - df['High'].shift(1)) > (df['Low'].shift(1) - df['Low']),
+                           np.maximum(df['High'] - df['High'].shift(1), 0), 0)
+    df['DMminus'] = np.where((df['Low'].shift(1) - df['Low']) > (df['High'] - df['High'].shift(1)),
+                            np.maximum(df['Low'].shift(1) - df['Low'], 0), 0)
     
-    # Find value areas
-    total_volume = np.sum(volume_profile)
-    cumulative_volume = np.cumsum(np.sort(volume_profile)[::-1])
-    value_area_threshold = total_volume * 0.7  # 70% of volume
+    TR_smoothed = df['TR'].rolling(window=period).mean()
+    DMplus_smoothed = df['DMplus'].rolling(window=period).mean()
+    DMminus_smoothed = df['DMminus'].rolling(window=period).mean()
     
-    value_area_mask = cumulative_volume <= value_area_threshold
-    high_volume_nodes = np.where(volume_profile >= np.sort(volume_profile)[::-1][value_area_mask][-1])[0]
+    DIplus = 100 * DMplus_smoothed / TR_smoothed
+    DIminus = 100 * DMminus_smoothed / TR_smoothed
+    
+    DX = 100 * abs(DIplus - DIminus) / (DIplus + DIminus)
+    ADX = DX.rolling(window=period).mean()
+    
+    return ADX
+
+def determine_trend(df):
+    """Determine market trend using multiple indicators"""
+    last_close = df['Close'].iloc[-1]
+    last_sma20 = df['SMA_20'].iloc[-1]
+    last_sma50 = df['SMA_50'].iloc[-1]
+    last_rsi = df['RSI'].iloc[-1]
+    last_adx = df['ADX'].iloc[-1]
+    
+    # Strong trend criteria
+    strong_trend = last_adx > 25
+    
+    if strong_trend:
+        if last_close > last_sma20 and last_sma20 > last_sma50 and last_rsi > 50:
+            return 'Bullish'
+        elif last_close < last_sma20 and last_sma20 < last_sma50 and last_rsi < 50:
+            return 'Bearish'
+    
+    return 'Neutral'
+
+def generate_chart_data(df):
+    """Generate chart data for Plotly"""
+    return [
+        {
+            'x': df.index.strftime('%Y-%m-%d').tolist(),
+            'y': df['Close'].tolist(),
+            'type': 'scatter',
+            'name': 'Price',
+            'line': {'color': '#17BECF'}
+        },
+        {
+            'x': df.index.strftime('%Y-%m-%d').tolist(),
+            'y': df['SMA_20'].tolist(),
+            'type': 'scatter',
+            'name': 'SMA 20',
+            'line': {'color': '#7F7F7F'}
+        },
+        {
+            'x': df.index.strftime('%Y-%m-%d').tolist(),
+            'y': df['SMA_50'].tolist(),
+            'type': 'scatter',
+            'name': 'SMA 50',
+            'line': {'color': '#FFA500'}
+        }
+    ]
+
+def generate_prediction(df):
+    """Generate market prediction"""
+    last_close = df['Close'].iloc[-1]
+    last_sma20 = df['SMA_20'].iloc[-1]
+    last_rsi = df['RSI'].iloc[-1]
+    last_adx = df['ADX'].iloc[-1]
+    
+    # Initialize confidence and direction
+    confidence = 50.0
+    direction = "Sideways"
+    
+    # Strong trend detection
+    if last_adx > 25:
+        if last_close > last_sma20:
+            direction = "Up"
+            confidence = min(90, 60 + last_adx * 0.5)
+            if last_rsi > 70:
+                confidence *= 0.8  # Reduce confidence if overbought
+        else:
+            direction = "Down"
+            confidence = min(90, 60 + last_adx * 0.5)
+            if last_rsi < 30:
+                confidence *= 0.8  # Reduce confidence if oversold
+    
+    # Generate recommendation
+    if direction == "Up" and confidence > 65:
+        recommendation = "BUY"
+    elif direction == "Down" and confidence > 65:
+        recommendation = "SELL"
+    else:
+        recommendation = "HOLD"
     
     return {
-        'price_levels': price_bins[:-1],
-        'volumes': volume_profile,
-        'poc_price': price_bins[np.argmax(volume_profile)],  # Point of Control
-        'value_area_high': price_bins[high_volume_nodes[-1]],
-        'value_area_low': price_bins[high_volume_nodes[0]],
-        'high_volume_nodes': [(price_bins[i], volume_profile[i]) for i in high_volume_nodes]
+        'direction': direction,
+        'confidence': round(confidence, 2),
+        'recommendation': recommendation,
+        'timestamp': datetime.now().isoformat()
     }
 
-def detect_liquidity_pools(highs: np.ndarray, lows: np.ndarray, volumes: np.ndarray) -> List[Dict[str, Any]]:
-    """Detect institutional liquidity pools."""
-    liquidity_pools = []
-    window = 5
-    
-    for i in range(window, len(highs)-window):
-        # Look for clustered highs (resistance liquidity)
-        high_cluster = np.abs(highs[i-window:i+window] - highs[i]) < (highs[i] * 0.001)
-        if sum(high_cluster) >= 3:  # At least 3 clustered highs
-            avg_volume = np.mean(volumes[i-window:i+window][high_cluster])
-            
-            liquidity_pools.append({
-                'type': 'resistance',
-                'price': highs[i],
-                'volume': avg_volume,
-                'strength': sum(high_cluster),
-                'index': i
-            })
+def main():
+    """Main function to handle command line execution"""
+    try:
+        # Get input data from environment variable
+        input_data = os.environ.get('INPUT_DATA')
+        if not input_data:
+            raise ValueError("No input data provided")
         
-        # Look for clustered lows (support liquidity)
-        low_cluster = np.abs(lows[i-window:i+window] - lows[i]) < (lows[i] * 0.001)
-        if sum(low_cluster) >= 3:  # At least 3 clustered lows
-            avg_volume = np.mean(volumes[i-window:i+window][low_cluster])
-            
-            liquidity_pools.append({
-                'type': 'support',
-                'price': lows[i],
-                'volume': avg_volume,
-                'strength': sum(low_cluster),
-                'index': i
-            })
-    
-    return liquidity_pools
-
-def detect_institutional_patterns(opens: np.ndarray, highs: np.ndarray, lows: np.ndarray, closes: np.ndarray, volumes: np.ndarray) -> List[Dict[str, Any]]:
-    """Detect institutional trading patterns."""
-    patterns = []
-    window = 3
-    
-    for i in range(window, len(closes)-1):
-        # Institutional Stop Hunt Pattern
-        if (highs[i] > max(highs[i-window:i]) and    # New high
-            closes[i] < opens[i] and                  # Bearish close
-            volumes[i] > np.mean(volumes[i-window:i]) * 1.5):  # High volume
-            
-            patterns.append({
-                'type': 'stop_hunt',
-                'direction': 'bearish',
-                'price': highs[i],
-                'volume': volumes[i],
-                'strength': volumes[i] / np.mean(volumes[i-window:i]),
-                'index': i
-            })
+        # Parse input data
+        data = json.loads(input_data)
         
-        # Institutional Accumulation Pattern
-        elif (lows[i] < min(lows[i-window:i]) and    # New low
-              closes[i] > opens[i] and               # Bullish close
-              volumes[i] > np.mean(volumes[i-window:i]) * 1.5):  # High volume
-            
-            patterns.append({
-                'type': 'accumulation',
-                'direction': 'bullish',
-                'price': lows[i],
-                'volume': volumes[i],
-                'strength': volumes[i] / np.mean(volumes[i-window:i]),
-                'index': i
-            })
-    
-    return patterns
+        # Analyze data
+        result = analyze_market_data(data['data'])
+        
+        # Print result as JSON
+        print(json.dumps(result))
+        
+    except Exception as e:
+        print(json.dumps({
+            'status': 'error',
+            'error': str(e)
+        }))
+        sys.exit(1)
 
-def analyze_smc(highs: np.ndarray, lows: np.ndarray, opens: np.ndarray, closes: np.ndarray, volumes: np.ndarray) -> Dict[str, Any]:
-    """Enhanced Smart Money Concepts analysis."""
-    # Convert inputs to numpy arrays if they aren't already
-    highs = np.array(highs)
-    lows = np.array(lows)
-    opens = np.array(opens)
-    closes = np.array(closes)
-    volumes = np.array(volumes)
-    
-    # Get order blocks
-    order_blocks = detect_order_blocks(highs, lows, closes, volumes)
-    
-    # Analyze volume profile
-    volume_profile = analyze_volume_profile(closes, volumes)
-    
-    # Detect liquidity pools
-    liquidity_pools = detect_liquidity_pools(highs, lows, volumes)
-    
-    # Detect institutional patterns
-    inst_patterns = detect_institutional_patterns(opens, highs, lows, closes, volumes)
-    
-    # Determine current market context
-    latest_close = closes[0]
-    context = {
-        'above_poc': latest_close > volume_profile['poc_price'],
-        'in_value_area': volume_profile['value_area_low'] <= latest_close <= volume_profile['value_area_high'],
-        'near_liquidity': any(abs(pool['price'] - latest_close) / latest_close < 0.01 
-                             for pool in liquidity_pools),
-        'active_patterns': [p for p in inst_patterns if p['index'] > len(closes)-5]
-    }
-    
-    return {
-        'order_blocks': order_blocks,
-        'volume_profile': volume_profile,
-        'liquidity_pools': liquidity_pools,
-        'institutional_patterns': inst_patterns,
-        'market_context': context
-    }
+if __name__ == "__main__":
+    main()
