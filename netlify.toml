@@ -1,7 +1,11 @@
 [build]
   publish = "public"
   functions = "netlify/functions"
-  command = "bash netlify/functions/setup.sh"
+  command = """
+    npm install
+    cd netlify/functions && npm install
+    bash setup.sh
+  """
 
 [functions]
   node_bundler = "esbuild"
@@ -12,6 +16,8 @@
   PYTHON_VERSION = "3.9"
   NODE_VERSION = "16"
   PYTHONPATH = "/opt/build/repo/netlify/functions/python"
+  PATH = "/opt/build/repo/netlify/functions/python:$PATH"
+  NPM_FLAGS = "--no-optional"
 
 [[redirects]]
   from = "/"
@@ -65,3 +71,7 @@
     Access-Control-Allow-Origin = "*"
     Access-Control-Allow-Methods = "GET, POST, OPTIONS"
     Access-Control-Allow-Headers = "Content-Type"
+
+[context.production.environment]
+  DEBUG = "False"
+  NODE_ENV = "production"
